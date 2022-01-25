@@ -4,23 +4,13 @@
 # Built using the Discord.py Python API
 # Written by JA Mann
 # 
-# Future implementation plans:
-# - AO3 fic scrubber/random line repeater
-# - More general abstraction of the code into functions, classes, and scripts
-# - Fix Gdocs API credentials problem
-# - Add .mobi/.epub readability
-# - Add ingress pipeline with ability to handle various different file types
-# - Add configuration file that can be updated manually or through a command
-# - Spoiler all images originally posted in a NSFW channel
-# - Add new server initialization function
-# - Handle case of burger emoji delimiter being used organically in message
-#
-# Current implementations:
-# - Random line generator (read from a .txt file imported from a Google Doc)
-# - Fixed for the chance that a Tenor gif might cause the bot to embed any link instead of just the Tenor gif
-# - Import all global variables from configuration file
-# - Added ability to choose specific flag in the configuration file
-# - Starboard leaderboard (added more rigorous data storage in the receipts.csv file)
+# Release 2022.01.24.A
+# Release Notes: 
+# - Added in functionality to print and display the daily NYT Spelling Bee Puzzle at a certain time every day
+# - Added in functionality to view and change configuration file parameters
+# - Added in functionality to keep track of all words sprinted using the @Sprinto bot
+# - Added in functionality to pull a random line from an AO3 fanfiction (still in development)
+#                   
 #
 # ============================================================================================ ENDOBOT #
 ########################################################################################################
@@ -32,42 +22,61 @@
 # IMPORTS AND GLOBAL VARIABLES ----------------------------------------------------------------------- #
 
 from __future__ import print_function
-from discord.audit_logs import _transform_verification_level
-
+#from asyncio.windows_events import NULL
+from async_timeout import asyncio
+from cv2 import line
+from discord.ext import commands, tasks
+from discord.utils import get
 from oauth2client import client
 from os.path import exists
 
 import random
-import os
 import discord
 import numpy as np
 import datetime
 import csv
 import re
 
-import AO3
-
+import requests
+from html2image import Html2Image
 import configparser
 
-from discord.utils import get
-
-URL_REGEX = r"""(?i)\b((?:https?:(?:/{1,3}|[a-z0-9%])|[a-z0-9.\-]+[.](?:com|net|org|edu|gov|mil|aero|asia|biz|cat|coop|info|int|jobs|mobi|museum|name|post|pro|tel|travel|xxx|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cs|cu|cv|cx|cy|cz|dd|de|dj|dk|dm|do|dz|ec|ee|eg|eh|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mm|mn|mo|mp|mq|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|om|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ro|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|Ja|sk|sl|sm|sn|so|sr|ss|st|su|sv|sx|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw)/)(?:[^\s()<>{}\[\]]+|\([^\s()]*?\([^\s()]+\)[^\s()]*?\)|\([^\s]+?\))+(?:\([^\s()]*?\([^\s()]+\)[^\s()]*?\)|\([^\s]+?\)|[^\s`!()\[\]{};:'".,<>?«»“”‘’])|(?:(?<!@)[a-z0-9]+(?:[.\-][a-z0-9]+)*[.](?:com|net|org|edu|gov|mil|aero|asia|biz|cat|coop|info|int|jobs|mobi|museum|name|post|pro|tel|travel|xxx|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cs|cu|cv|cx|cy|cz|dd|de|dj|dk|dm|do|dz|ec|ee|eg|eh|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mm|mn|mo|mp|mq|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|om|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ro|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|Ja|sk|sl|sm|sn|so|sr|ss|st|su|sv|sx|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw)\b/?(?!@)))"""
-
-# Initialize Global Variables (temporary implementation)
-TOKEN = ""
-FILENAME = ""
-RECEIPTS_FILENAME = ""
-STARBOARD_OUTPUT_CHANNEL_ID = ""
-STARBOARD_REACTION_THRESHOLD = ""
-STARBOARD_EMOJI_DELIMITER = ""
-RESPONSE_FLAG = ""
-RESPONSE_FLAG_CASE_SENSITIVE = ""
-RESPONSE_FLAG_MATCH_EXACT_CASE = ""
-
+# Enables ability to check member IDs within a server (used for Leaderboard functionality)
+# This requires a specific permission through Discord's API and will need to be renewed periodically
 intents = discord.Intents.default()
 intents.members = True
 
 client = discord.Client(intents=intents)
+
+URL_REGEX = r"""(?i)\b((?:https?:(?:/{1,3}|[a-z0-9%])|[a-z0-9.\-]+[.](?:com|net|org|edu|gov|mil|aero|asia|biz|cat|coop|info|int|jobs|mobi|museum|name|post|pro|tel|travel|xxx|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cs|cu|cv|cx|cy|cz|dd|de|dj|dk|dm|do|dz|ec|ee|eg|eh|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mm|mn|mo|mp|mq|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|om|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ro|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|Ja|sk|sl|sm|sn|so|sr|ss|st|su|sv|sx|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw)/)(?:[^\s()<>{}\[\]]+|\([^\s()]*?\([^\s()]+\)[^\s()]*?\)|\([^\s]+?\))+(?:\([^\s()]*?\([^\s()]+\)[^\s()]*?\)|\([^\s]+?\)|[^\s`!()\[\]{};:'".,<>?«»“”‘’])|(?:(?<!@)[a-z0-9]+(?:[.\-][a-z0-9]+)*[.](?:com|net|org|edu|gov|mil|aero|asia|biz|cat|coop|info|int|jobs|mobi|museum|name|post|pro|tel|travel|xxx|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cs|cu|cv|cx|cy|cz|dd|de|dj|dk|dm|do|dz|ec|ee|eg|eh|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mm|mn|mo|mp|mq|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|om|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ro|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|Ja|sk|sl|sm|sn|so|sr|ss|st|su|sv|sx|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw)\b/?(?!@)))"""
+
+TOKEN = "ODU1MjU4NDQyMTc5MjgwOTM2.YMv3fg.fN-0wunUIgI3VSdyIf0cO-75g4c"
+CONFIG_FILENAME = "configuration.ini"
+GUILD_ID = "489245389854343170"
+
+FILENAME = None
+RECEIPTS_FILENAME = None
+STARBOARD_OUTPUT_CHANNEL_ID = None
+STARBOARD_REACTION_THRESHOLD = None
+STARBOARD_EMOJI_DELIMITER = None
+RESPONSE_FLAG = None
+RESPONSE_FLAG_CASE_SENSITIVE = None
+RESPONSE_FLAG_MATCH_EXACT_CASE = None
+LOADED_EXTERNAL_MEDIA_CONFIG_FILENAME = None
+HOTWORDS_FILENAME = None
+MACHINE_LEARNING_RESPONSE_FLAG = None
+SPELLING_BEE_URL = None
+SPELLING_BEE_OUTPUT_CHANNEL_ID = None
+SPELLING_BEE_AUTO_POST = None
+SPELLING_BEE_POST_TIME = None
+SPELLING_BEE_HTML = None
+SPELLING_BEE_CSS = None
+SPELLING_BEE_PNG = None
+SPRINT_BOT_COUNTER = None
+SPRINT_BOT_AUTOTRIGGER = None
+
+DAILY_MESSAGE_TIME = None
+
 
 # ----------------------------------------------------------------------- IMPORTS AND GLOBAL VARIABLES #
 # ==================================================================================================== #
@@ -77,55 +86,106 @@ client = discord.Client(intents=intents)
 # ==================================================================================================== #
 # INITIALIZATIONS ------------------------------------------------------------------------------------ #
 
-# read_ini_file  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
-# Read an INI configuration file
-# INPUTS:
-#       - (string) filename: the INI file to be read
-#       - (string) section: the section to search for
-#       - (string) key: the key to search for within the previously specified section
-# RETURNS:
-#       - (string) value: the value stored at a specific section and key in an INI file
-def read_ini_file(filename, section, key):
-    config = configparser.ConfigParser()
-    config.read(filename)
-    
-    return config[section][key]
-
 # initialize_bot - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # Initializes the bot with configuration information read from an INI file
 # INPUTS:
 #       - (string) config_filename: the master configuration file name
 #       - (string) servername: the name of the server to search for in the configuration file INI structure
 # RETURNS:
-#       - (string) token: the server token used to initialize the connection with the Discord API
-#       - (string) starboard_filename: the filename where the starboarded messages are stored
-#       - (string) starboard_receipts: the filename where the starboard message metadata is stored
-#       - (string) starboard_output_channel_id: the Discord-side token for the selected starboard channel
-#       - (string) starboard_reaction_threshold: minimum number of react emojis needed to trigger bot response
-#       - (string) starboard_emoji_delimiter: emoji that the bot searches for when a post is reacted upon
-#       - (string) response_flag: the trigger phrase used to generate a bot-selected starboard response message
-#       - (string) response_flag_case_sensitive: whether or not the bot should search for a case-sensitive match of the response flag ("Yes"/"No")
-#       - (string) response_flag_match_exact_case: whether or not the bot should search for an exact case match of the response flag ("Yes","No")
-#       - (string) loaded_external_media_config_filename: location of the server's external media configuration file
-#       - (string) hotwords_filename: location of the server's hotwords configuration file
+#       - (int) error: returns an error code if there's a problem, 0 otherwise
+
 def initialize_bot(config_filename, servername):
-    token = read_ini_file(config_filename, servername, "token")
-    starboard_filename = read_ini_file(config_filename, servername, "starboard_filename")
-    starboard_receipts = read_ini_file(config_filename, servername, "starboard_receipts")
-    starboard_output_channel_id = read_ini_file(config_filename, servername, "starboard_output_channel_id")
-    starboard_reaction_threshold = read_ini_file(config_filename, servername, "starboard_reaction_threshold")
-    starboard_emoji_delimiter = read_ini_file(config_filename, servername, "starboard_emoji_delimiter")
-    response_flag = read_ini_file(config_filename, servername, "response_flag")
-    response_flag_case_sensitive = read_ini_file(config_filename, servername, "response_flag_case_sensitive")
-    response_flag_match_exact_case = read_ini_file(config_filename, servername, "response_flag_match_exact_case")
-    loaded_external_media_config_filename = read_ini_file(config_filename, servername, "loaded_external_media_config_filename")
-    hotwords_filename = read_ini_file(config_filename, servername, "hotwords_filename")
+    global FILENAME
+    global RECEIPTS_FILENAME
+    global STARBOARD_OUTPUT_CHANNEL_ID
+    global STARBOARD_REACTION_THRESHOLD
+    global STARBOARD_EMOJI_DELIMITER
+    global RESPONSE_FLAG
+    global RESPONSE_FLAG_CASE_SENSITIVE
+    global RESPONSE_FLAG_MATCH_EXACT_CASE
+    global LOADED_EXTERNAL_MEDIA_CONFIG_FILENAME
+    global HOTWORDS_FILENAME
+    global MACHINE_LEARNING_RESPONSE_FLAG
+    global SPELLING_BEE_URL
+    global SPELLING_BEE_OUTPUT_CHANNEL_ID
+    global SPELLING_BEE_AUTO_POST
+    global SPELLING_BEE_POST_TIME
+    global SPELLING_BEE_HTML
+    global SPELLING_BEE_CSS
+    global SPELLING_BEE_PNG
+    global SPRINT_BOT_COUNTER
+    global SPRINT_BOT_AUTOTRIGGER
 
-    return token, starboard_filename, starboard_receipts, starboard_output_channel_id, starboard_reaction_threshold, starboard_emoji_delimiter, response_flag, response_flag_case_sensitive, response_flag_match_exact_case, loaded_external_media_config_filename, hotwords_filename
+    global DAILY_MESSAGE_TIME
+    
+    exists = 0
+    
+    exists, FILENAME = read_ini_file(config_filename, servername, "starboard_filename")
+    if exists == -1:
+        return -2
+    exists, RECEIPTS_FILENAME = read_ini_file(config_filename, servername, "starboard_receipts")
+    if exists == -1:
+        return -3
+    exists, STARBOARD_OUTPUT_CHANNEL_ID = read_ini_file(config_filename, servername, "starboard_output_channel_id")
+    if exists == -1:
+        return -4
+    exists, STARBOARD_REACTION_THRESHOLD = read_ini_file(config_filename, servername, "starboard_reaction_threshold")
+    if exists == -1:
+        return -5
+    exists, STARBOARD_EMOJI_DELIMITER = read_ini_file(config_filename, servername, "starboard_emoji_delimiter")
+    if exists == -1:
+        return -6
+    exists, RESPONSE_FLAG = read_ini_file(config_filename, servername, "response_flag")
+    if exists == -1:
+        return -7
+    exists, RESPONSE_FLAG_CASE_SENSITIVE = read_ini_file(config_filename, servername, "response_flag_case_sensitive")
+    if exists == -1:
+        return -8
+    exists, RESPONSE_FLAG_MATCH_EXACT_CASE = read_ini_file(config_filename, servername, "response_flag_match_exact_case")
+    if exists == -1:
+        return -9
+    exists, LOADED_EXTERNAL_MEDIA_CONFIG_FILENAME = read_ini_file(config_filename, servername, "loaded_external_media_config_filename")
+    if exists == -1:
+        return -10
+    exists, HOTWORDS_FILENAME = read_ini_file(config_filename, servername, "hotwords_filename")
+    if exists == -1:
+        return -11
+    exists, MACHINE_LEARNING_RESPONSE_FLAG = read_ini_file(config_filename, servername, "machine_learning_response_flag")
+    if exists == -1:
+        return -12
+    exists, SPELLING_BEE_URL = read_ini_file(config_filename, servername, "spelling_bee_url")
+    if exists == -1:
+        return -13
+    exists, SPELLING_BEE_OUTPUT_CHANNEL_ID = read_ini_file(config_filename, servername, "spelling_bee_output_channel_id")
+    if exists == -1:
+        return -14
+    exists, SPELLING_BEE_AUTO_POST = read_ini_file(config_filename, servername, "spelling_bee_auto_post")
+    if exists == -1:
+        return -15
+    exists, SPELLING_BEE_POST_TIME = read_ini_file(config_filename, servername, "spelling_bee_post_time")
+    if exists == -1:
+        return -16
+    exists, SPELLING_BEE_HTML = read_ini_file(config_filename, servername, "spelling_bee_html")
+    if exists == -1:
+        return -17
+    exists, SPELLING_BEE_CSS = read_ini_file(config_filename, servername, "spelling_bee_css")
+    if exists == -1:
+        return -18
+    exists, SPELLING_BEE_PNG = read_ini_file(config_filename, servername, "spelling_bee_png")
+    if exists == -1:
+        return -19
+    exists, SPRINT_BOT_COUNTER = read_ini_file(config_filename, servername, "sprint_bot_counter")
+    if exists == -1:
+        return -20
+    exists, SPRINT_BOT_AUTOTRIGGER = read_ini_file(config_filename, servername, "sprint_bot_autotrigger")
+    if exists == -1:
+        return -21
 
-TOKEN, FILENAME, RECEIPTS_FILENAME, STARBOARD_OUTPUT_CHANNEL_ID, STARBOARD_REACTION_THRESHOLD, STARBOARD_EMOJI_DELIMITER, RESPONSE_FLAG, RESPONSE_FLAG_CASE_SENSITIVE, RESPONSE_FLAG_MATCH_EXACT_CASE, LOADED_EXTERNAL_MEDIA_CONFIG_FILENAME, HOTWORDS_FILENAME = initialize_bot("configuration.ini", "489245389854343170")
-STARBOARD_OUTPUT_CHANNEL_ID = int(STARBOARD_OUTPUT_CHANNEL_ID)
-STARBOARD_REACTION_THRESHOLD = int(STARBOARD_REACTION_THRESHOLD)
+    STARBOARD_OUTPUT_CHANNEL_ID = int(STARBOARD_OUTPUT_CHANNEL_ID)
+    STARBOARD_REACTION_THRESHOLD = int(STARBOARD_REACTION_THRESHOLD)
+    SPELLING_BEE_OUTPUT_CHANNEL_ID = int(SPELLING_BEE_OUTPUT_CHANNEL_ID)
+    
+    return 0
 
 # ------------------------------------------------------------------------------------ INITIALIZATIONS #
 # ==================================================================================================== #
@@ -134,6 +194,42 @@ STARBOARD_REACTION_THRESHOLD = int(STARBOARD_REACTION_THRESHOLD)
 
 # ==================================================================================================== #
 # LOCAL FUNCTIONS ------------------------------------------------------------------------------------ #
+
+# read_ini_file  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Read an INI configuration file
+# INPUTS:
+#       - (string) filename: the INI file to be read
+#       - (string) section: the section to search for
+#       - (string) key: the key to search for within the previously specified section
+# RETURNS:
+#       - (bool) exists: 0 if yes, -1 if no
+#       - (string) value: the value stored at a specific section and key in an INI file
+def read_ini_file(filename, section, key):
+    config = configparser.ConfigParser()
+    config.read(filename)
+    if config[section][key]:
+        return 0, config[section][key]
+    else:
+        return -1, -1
+
+# time_processor - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Takes the user-given time value and converts it into integers that datetime can process
+# INPUTS:
+#       - (string) input_time: the time (formatted HH:MM:SS) in UTC
+# OUTPUTS:
+#       - (bool) status: returns 0 if no problem, -1 if problem
+#       - (int) hour: the hour
+#       - (int) minute: the minute
+#       - (int) second: the second
+def time_processor(input_time):
+    values = str(input_time).split(":")
+    status = 0
+    if len(values) != 3:
+        status = -1
+    hour = int(values[0])
+    minute = int(values[1])
+    second = int(values[2])
+    return status, hour, minute, second
 
 # check_hotword  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # Checks to see if a hotword is already included in the hotwords csv file
@@ -193,7 +289,7 @@ def add_hotword(hotwords_filename, hotword, response, message_sender):
     return status, output_message
 
 # remove_hotword - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
-# Removes a hotword to the hotwords CSV file
+# Removes a hotword from the hotwords CSV file
 # INPUTS:
 #       - (string) hotwords_filename: the location of the hotwords csv file
 #       - (string) hotword: the trigger word to be deleted
@@ -231,36 +327,6 @@ def remove_hotword(hotwords_filename, hotword):
     else:
         output_message = "This trigger phrase was not found."
     
-    return status, output_message
-
-
-# list_hotwords  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
-# Lists all currently established trigger phrases that the bot is listening for.
-# INPUTS:
-#       - (string) hotwords_filename: the location of the hotwords csv file
-#       - (DISCORD CLASS) message: the message that triggered this function and its metadata (used for printing to the right channel)
-# RETURNS:
-#       - (bool) status: -1 if failed, 0 if successful
-#       - (string) output_message: the message given back to the bot to be printed to the user in-line (if necessary)
-async def list_hotwords(hotwords_filename, message):
-    status = 0
-    output_message = ""
-    embed_body = ""
-
-    # Build up embed
-    embed = discord.Embed(title = "EndoBot Trigger Phrases", description = "*For more information, visit the bot's [GitHub page](https://github.com/jadonmann/EndoBot).*", color=0x0077ff)
-
-    with open(hotwords_filename, "r") as loaded_file:
-        reader = csv.reader(loaded_file, delimiter = "🍔")
-
-        # Build embed field - appends new fields to the end of the previous one to (theoretically) mean that an unlimited number of trigger phrases can be displayed 
-        for row in reader:
-            embed_body = "**Bot Response:** \"%s\"\n**Reply to Sender?** %s\n\n" % (row[1], row[2])
-            embed.add_field(name = row[0], value = embed_body, inline = False)
-
-    channel = message.channel
-    await channel.send(embed = embed)
-
     return status, output_message
 
 # load_external_media_config - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
@@ -458,6 +524,226 @@ def find_line(filepath):
                         continue
 
     return selected_line
+
+# retrieve_website_html  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Retrieves the HTML from a web page and prints it to a string.
+# INPUTS: 
+#       - (string) url: the webpage from which to retrieve the HTML
+# OUTPUTS:
+#       - (string) output: the output string of HTML
+def retrieve_website_html(url):
+    session = requests.Session()
+    session.headers["User-Agent"] = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/44.0.2403.157 Safari/537.36"
+
+    html_interim = session.get(url).content
+    html = str(html_interim)
+    
+    return html
+
+# process_ao3_html - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Takes the raw HTML text stream from an AO3 webpage and removes the unnecessary material, leaving nothing but the site content behind.
+# INPUTS:
+#       - (string) url: the link to the AO3 webpage to be processed
+# OUTPUTS:
+#       - (string array) chapter_content: the full chapter-by-chapter content of the webpage (note that chapter_content[0] is empty)
+def process_ao3_html(url):
+    # Make sure that the link provided includes the WHOLE text of the work
+    if url.find("?view_adult=true&view_full_work=true") == -1:
+        if url.find("?") != -1:
+            formatted_url = url.split("?")
+            url = formatted_url[0] + "?view_adult=true&view_full_work=true"
+        else:
+            url = url + "?view_adult=true&view_full_work=true"
+
+    # Retrieve HTML from webpage
+    html = retrieve_website_html(url)
+
+    if html.find("<dd class=\"chapters\">1/1</dd>") == -1:
+        # Begin trimming out the fat (the chosen delimiter happens to also split the work up into chapters, so that's neat)
+        # NOTE: chapter_list[0] is all useless garbage
+        chapter_list = html.split("<h3 class=\"landmark heading\" id=\"work\">Chapter Text</h3>\\n    <p>")
+
+        chapter_content_interim = [None] * len(chapter_list)
+        chapter_content = [None] * len(chapter_list)
+        for i in range(len(chapter_list)):
+            # Ignore chapter_list[0]
+            if i == 0:
+                continue
+            chapter_content_interim[i] = chapter_list[i].split("<!--/main-->")
+            chapter_content[i] = chapter_content_interim[i][0]
+            chapter_content = remove_html_artifacts(chapter_content, i)
+    else:
+        chapter_list = html.split("<h3 class=\"landmark heading\" id=\"work\">Work Text:</h3>\\n          <div class=\"userstuff\"><p>")
+        chapter_content = chapter_list[1].split("<!-- end cache -->")
+        i = 0
+        chapter_content = remove_html_artifacts(chapter_content, 0)
+
+    return chapter_content
+
+# change_configuration - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Changes a line in the configuration document.
+# INPUTS:
+#       - (string) config_category: the name of the key whose value is to be changed
+#       - (string) new_value: the name of the value to print to config_category
+# RETURNS:
+#       - (int) status: the error status of the function. 0 if okay, less than 0 if not
+#       - (string) output_message: the string to be printed to Discord to confirm success or failure
+def change_configuration(config_category, new_value):
+    # Initialize configparser
+    config = configparser.ConfigParser()
+    config.read(CONFIG_FILENAME)
+
+    status = 0
+    output_message = ""
+    config_category_flag = 0
+
+    for (key, val) in config.items(GUILD_ID):
+        if key == config_category:
+            config_category_flag = 1
+            config.set(GUILD_ID, key, new_value)
+
+            with open(CONFIG_FILENAME, 'w') as configfile:
+                config.write(configfile)
+            
+            break
+
+    if config_category_flag == 1:
+        output_message = "Success! Configuration key `%s` has been updated with value `%s`." % (config_category, new_value)
+    else:
+        output_message = "ERROR - configuration key `%s` was not found. Please try again, or type `!eb config list` for a list of all configuration keys and values." % (config_category)
+
+    return status, output_message
+           
+# remove_html_artifacts  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Removes all random artifacts from an HTML webpage string.
+# INPUTS:
+#       - (string array) chapter_content: the array of content from the HTML file, separated into separate chapters
+#       - (int) i: the index used to select the chapter to process from the content array
+# RETURNS:
+#       - (string array) chapter_content: the post-processed chapter_content array
+def remove_html_artifacts(chapter_content, i):
+    chapter_content[i] = chapter_content[i].replace("\n", "")
+    chapter_content[i] = chapter_content[i].replace(" </em>", "* ")
+    chapter_content[i] = chapter_content[i].replace("<em> ", " *")
+    chapter_content[i] = chapter_content[i].replace("<em>", "*")
+    chapter_content[i] = chapter_content[i].replace("</em>", "*")
+    chapter_content[i] = chapter_content[i].replace("<p>\\xc2\\xa0</p>", "")
+    chapter_content[i] = chapter_content[i].replace("\\xe2\\x80\\x94", "—")
+    chapter_content[i] = chapter_content[i].replace("\\xc2\\xa0</p><p>", "")
+    chapter_content[i] = chapter_content[i].replace("\\xe2\\x80\\xa6", "...")
+    chapter_content[i] = chapter_content[i].replace("\\", "")
+    chapter_content[i] = chapter_content[i].replace("n\'t", "n't")
+    chapter_content[i] = chapter_content[i].replace("<hr/>", "")
+    chapter_content[i] = chapter_content[i].replace("<strong>", "")
+    chapter_content[i] = chapter_content[i].replace("</strong>", "")
+    chapter_content[i] = chapter_content[i].replace("</p>n<p>", "</p><p>")
+    chapter_content[i] = chapter_content[i].replace("xe2x80x99", "'")
+    chapter_content[i] = chapter_content[i].replace("xe2x80x9c", "\"")
+    chapter_content[i] = chapter_content[i].replace("xe2x80x9d", "\"")
+    chapter_content[i] = chapter_content[i].replace("</p>nn", "</p>")
+    chapter_content[i] = chapter_content[i].replace("</p>n", "</p>")
+    chapter_content[i] = chapter_content[i].replace("nn</p>", "</p>")
+    chapter_content[i] = chapter_content[i].replace("n</p>", "</p>")
+    chapter_content[i] = chapter_content[i].replace("'n  ", "")
+    chapter_content[i] = chapter_content[i].replace("</p>  </div>n  '", "")
+    chapter_content[i] = chapter_content[i].replace("xc2xa0", " ")
+    chapter_content[i] = chapter_content[i].replace("n  <span>", "")
+    chapter_content[i] = chapter_content[i].replace("</span>", "")
+    chapter_content[i] = chapter_content[i].replace("n  <span>", "")
+    chapter_content[i] = chapter_content[i].replace("*n    <span>", "*")
+    chapter_content[i] = chapter_content[i].replace("n  *", "*")
+    chapter_content[i] = chapter_content[i].replace("</p></div>n        ", "")
+    chapter_content[i] = chapter_content[i].replace(" align=\"CENTER\"", "")
+    chapter_content[i] = chapter_content[i].replace(" align=\"LEFT\"", "")
+    chapter_content[i] = chapter_content[i].replace(" align=\"RIGHT\"", "")
+    chapter_content[i] = chapter_content[i].replace("</p>  </div>", "")
+    chapter_content[i] = chapter_content[i].replace("</br> ", "</p><p>") 
+
+    return chapter_content
+
+
+
+# sprint_bot_word_count_processor  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Retrieves usernames and word counts for each sprint and adds them to the tabulator.
+# INPUTS:
+#       - (string) message_contents: the contents of the message
+#       - (string) sprint_bot_counter_filename: the location of the CSV file where the historical sprint data is stored 
+# RETURNS:
+#       - N/A
+def sprint_bot_word_count_processor(message_contents, sprint_bot_counter_filename):
+    status = 0
+    output_string = "" # "**Current Yearly Total Sprint Stats**\n\n"
+
+    # Begin by parsing @Sprinto's output message and retrieve the user ID and the word count
+    sprinters = message_contents.split("<@!")
+
+    # In the newly created array of user ID/word count pairs, begin to sort through them one by one to see if they're already listed in the CSV
+    cc = 0
+    for i in sprinters:
+        # Skip the first entry in the array as it is junk
+        if cc == 0:
+            cc += 1
+            continue
+        # Split the User ID and the word count apart
+        interim = i.split("> — **")
+        current_sprinter_id = interim[0]
+        interim2 = interim[1].split(" words**")
+        current_sprinter_wc = interim2[0]
+        current_sprinter_wc = current_sprinter_wc.replace(",","")
+
+        # Retrieve username from User ID
+        username = client.get_user(int(current_sprinter_id))
+        split_username = str(username).split("#")
+        username = split_username[0]
+
+        # Check to see if the user is already listed in the CSV
+        found_user = 0
+
+        # Generate a temporary array to store CSV data in
+        temp_file = list()
+        
+        # Read through output file
+        with open(sprint_bot_counter_filename, "r") as loaded_file:
+            reader = csv.reader(loaded_file, delimiter = ",")
+
+            # Print to temp file while also checking if user ID already exists
+            for row in reader:
+                temp_file.append(row)
+                for current_id in row:
+                    if current_id == current_sprinter_id:
+                        found_user = 1
+                        # If the user ID is found, remove it from the temp file
+                        temp_file.remove(row)
+                        previous_wc = row[1]
+
+                        # Combine the new word count with the old one
+                        wc = int(previous_wc) + int(current_sprinter_wc)
+
+                        # Print the new combo word count to the CSV
+                        out = [current_sprinter_id, str(wc)]
+                        # output_string += "@%s: %s words\n" % (username, str(wc))
+                        temp_file.append(out)
+                
+            # If the user is new to the list, add them and their word count as-is
+            if found_user != 1:
+                out = [current_sprinter_id, current_sprinter_wc]
+                # output_string += "@%s: %s words\n" % (username, current_sprinter_wc)
+                temp_file.append(out)
+        
+        # Print the temp file back out to the CSV file
+        with open(sprint_bot_counter_filename, "w") as loaded_file:
+            writer = csv.writer(loaded_file, delimiter = ",")
+            writer.writerows(temp_file)
+
+    return status, output_string
+
+    # 🏆 **CONGRATS EVERYONE**
+    # `1.` <@!623595478172434432> — **394 words** (13 wpm)
+    # `2.` <@!330900130997862400> — **192 words** (6 wpm)
+
+    # `_sprint` to start another.
+
+
     
 # ------------------------------------------------------------------------------------ LOCAL FUNCTIONS #
 # ==================================================================================================== #
@@ -539,6 +825,35 @@ async def edit_starboard_message(payload, output_channel, message, count, respon
     build_content = "%s **%d** %s" % (STARBOARD_EMOJI_DELIMITER, count, original_channel.mention)
     await sent_message.edit(content = build_content, embed = embed)
 
+# list_hotwords  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Lists all currently established trigger phrases that the bot is listening for.
+# INPUTS:
+#       - (string) hotwords_filename: the location of the hotwords csv file
+#       - (DISCORD CLASS) message: the message that triggered this function and its metadata (used for printing to the right channel)
+# RETURNS:
+#       - (bool) status: -1 if failed, 0 if successful
+#       - (string) output_message: the message given back to the bot to be printed to the user in-line (if necessary)
+async def list_hotwords(hotwords_filename, message):
+    status = 0
+    output_message = ""
+    embed_body = ""
+
+    # Build up embed
+    embed = discord.Embed(title = "EndoBot Trigger Phrases", description = "*For more information, visit the bot's [GitHub page](https://github.com/jadonmann/EndoBot).*", color=0x0077ff)
+
+    with open(hotwords_filename, "r") as loaded_file:
+        reader = csv.reader(loaded_file, delimiter = "🍔")
+
+        # Build embed field - appends new fields to the end of the previous one to (theoretically) mean that an unlimited number of trigger phrases can be displayed 
+        for row in reader:
+            embed_body = "**Bot Response:** \"%s\"\n**Reply to Sender?** %s\n\n" % (row[1], row[2])
+            embed.add_field(name = row[0], value = embed_body, inline = False)
+
+    channel = message.channel
+    await channel.send(embed = embed)
+
+    return status, output_message
+
 # bot_help - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # Prints the bot's current functionality in the form of a few embed posts to the server.
 # INPUTS:
@@ -563,7 +878,7 @@ async def bot_help(message):
     embed3 = discord.Embed(title = "EndoBot Help (Page 3)", color=0x0077ff)
     embed3.set_image(url = "https://media1.giphy.com/media/SYirgmIRk5hIJCuK7t/giphy.gif")
     embed3.add_field(name = "\u200b",
-                     value = "```cs\n# BOT CONFIGURATION #```\nThese commands allow moderators and server owners to change bot configuration settings without having to manually adjust or change any bot files. WARNING: this can permanently damage bot functionality if not handled correctly.\n\n`!eb config`\nThis command lists all available configuration options and their default/expected values.\n\n`!eb config [configuration option] [value]`\nThis command allows a moderator to change a configuration option. The brackets are required!",
+                     value = "```cs\n# BOT CONFIGURATION #```\nThese commands allow moderators and server owners to change bot configuration settings without having to manually adjust or change any bot files. WARNING: this can permanently damage bot functionality if not handled correctly.\n\n`!eb config list`\nThis command lists all available configuration options and their default/expected values.\n\n`!eb config [configuration option] [value]`\nThis command allows a moderator to change a configuration option. The brackets are required!\n\n`!eb reboot`\nThis restarts EndoBot and loads in any changes to the configuration file that may have been made.",
                      inline = False)
 
     embed4 = discord.Embed(title = "EndoBot Help (Page 4)", color=0x0077ff)
@@ -616,7 +931,7 @@ async def leaderboard(receipts_filename, message):
             cc = 0
             for user in unique_users:
                 if row[0] == user:
-                    unique_users_stats[cc] += 10
+                    unique_users_stats[cc] += 1
                 cc += 1
 
         # Sort all users, greatest to least, by zipping the two arrays together and sorting by the second array
@@ -636,7 +951,7 @@ async def leaderboard(receipts_filename, message):
         for i, j in zip(user_list, user_stats):
             username = client.get_user(int(i))
             split_username = str(username).split("#")
-            output_message_interim = "**@%s**: %d starred posts\n" % (split_username[0], int(j/10))
+            output_message_interim = "**@%s**: %d starred posts\n" % (split_username[0], int(j))
             output_message = output_message + output_message_interim
 
         embed.add_field(name = "\u200b", inline = False, value = output_message)
@@ -646,7 +961,205 @@ async def leaderboard(receipts_filename, message):
         await channel.send(embed = embed)
 
     return 0, None
+
+
+
+async def sprint_leaderboard(sprint_counter_filename, message):
+    user_id = list()
+    word_count = list()
+
+    # Open the sprint count file
+    with open(sprint_counter_filename, "r") as opened_file:
+        opened_csv = csv.reader(opened_file, delimiter = ",")
+
+        for row in opened_csv:
+            user_id.append(row[0])
+            word_count.append(row[1])
+        
+        # Sort all users, greatest to least, by zipping the two arrays together and sorting by the second array
+        zipped_pair = zip(user_id, word_count)
+        sorted_pairs = sorted(zipped_pair, key = lambda x: x[1], reverse = False)
+
+        # Unzip the arrays so they can be re-zipped later during the embed buildup
+        tuples = zip(*sorted_pairs)
+        user_list, user_stats = [ list(tuple) for tuple in tuples]
+
+        # Build up embed
+        title_builder = "✏️ @Sprinto Cumulative Word Count Totals ✏️"
+        embed = discord.Embed(title = title_builder, color=0x0077ff)
+        output_message = ""
+
+        # Print out sorted results to embed
+        for i, j in zip(user_list, user_stats):
+            username = client.get_user(int(i))
+            split_username = str(username).split("#")
+            output_message_interim = "**@%s**: %d words\n" % (split_username[0], int(j))
+            output_message = output_message + output_message_interim
+
+        embed.add_field(name = "\u200b", inline = False, value = output_message)
+
+        # Print to Discord
+        channel = message.channel
+        await channel.send(embed = embed)
+
+    return 0, None
+
+
+
+
+# spelling_bee_printer - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Takes the daily NYT Spelling Bee puzzle from the spelling bee website, converts the HTML into an image, and 
+# posts the image to a specified Discord channel at a certain time of the day. Please note that this was developed
+# for educational purposes only.
+# INPUTS:
+#       - (string) channel_id: The Discord channel where the image will be printed
+# RETURNS:
+#       - N/A
+async def spelling_bee_printer(channel_id):
+    url = SPELLING_BEE_URL
+
+    # Read the day's HTML file
+    html = retrieve_website_html(url)
+
+    # Pull the center letter and outer letters from the HTML file by trimming it down with the split() function
+    interim_values = html.split("\"centerLetter\":\"")
+    interim_values2 = interim_values[1].split("\",\"outerLetters\":[\"")
+    interim_values3 = interim_values2[1].split("\"],\"validLetters\":[\"")
+    center_letter = interim_values2[0]
+    outer_letters = interim_values3[0].split("\",\"")
+
+    # Pull the answers to the day's puzzle from the HTML file as well
+    interim_values4 = html.split("\"pangrams\":[\"")
+    interim_values5 = interim_values4[1].split("\"],\"answers\":")
+    answers = interim_values5[0].split("\",\"")
+
+    # Build a new HTML file with just the spelling bee in it so it can be captured as an image
+    with open("spelling_bee.html", "w") as working_html_document:
+        output_string = "<!DOCTYPE html><html ><head ><link rel=\"stylesheet\" type=\"text/css\" href=\""
+        working_html_document.write(output_string)
+        working_html_document.write(SPELLING_BEE_CSS)
+        output_string = "\" ><style> @font-face { font-family: 'nyt-franklin'; src: url(\"franklin.ttf\"); } #container { max-width: 261px; max-height: 271.23px; max-block-size: 261px; font-family: 'nyt-franklin';} </style ></head ><body style=\"background:white;\"><div id=\"container\"><svg class=\"hive-cell center\" viewBox=\"0 0 120 103.96152422706631\" ><polygon class=\"cell-fill\" points=\"0,51.96152422706631 30,0 90,0 120,51.96152422706631 90,103.92304845413263 30,103.92304845413263\" stroke=\"white\" stroke-width=\"7.5\" ></polygon><text class=\"heavy\" x=\"50%\" y=\"50%\" dx=\"-.30em\" dy=\"0.35em\" font-family=\"Helvetica\" font-size=\"1.875em\">"
+        working_html_document.write(output_string)
+        working_html_document.write(center_letter.upper())
+        output_string = "</text></svg ><svg class=\"hive-cell outer\" viewBox=\"0 0 120 103.92304845413263\" ><polygon class=\"cell-fill\" points=\"0,51.96152422706631 30,0 90,0 120,51.96152422706631 90,103.92304845413263 30,103.92304845413263\" stroke=\"white\" stroke-width=\"7.5\"></polygon ><text class=\"cell-letter\" x=\"50%\" y=\"50%\" dx=\"-0.25em\" dy=\"0.35em\" font-family=\"Helvetica\" font-size=\"1.875em\"eb>"
+        working_html_document.write(output_string)
+        working_html_document.write(outer_letters[0].upper())
+        output_string = "</text></svg ><svg class=\"hive-cell outer\" viewBox=\"0 0 120 103.92304845413263\" ><polygon class=\"cell-fill\" points=\"0,51.96152422706631 30,0 90,0 120,51.96152422706631 90,103.92304845413263 30,103.92304845413263\" stroke=\"white\" stroke-width=\"7.5\"></polygon ><text class=\"cell-letter\" x=\"50%\" y=\"50%\" dx=\"-0.25em\" dy=\"0.35em\" font-family=\"Helvetica\" font-size=\"1.875em\">"
+        working_html_document.write(output_string)
+        working_html_document.write(outer_letters[1].upper())
+        output_string = "</text></svg ><svg class=\"hive-cell outer\" viewBox=\"0 0 120 103.92304845413263\" ><polygon class=\"cell-fill\" points=\"0,51.96152422706631 30,0 90,0 120,51.96152422706631 90,103.92304845413263 30,103.92304845413263\" stroke=\"white\" stroke-width=\"7.5\"></polygon ><text class=\"cell-letter\" x=\"50%\" y=\"50%\" dx=\"-0.25em\" dy=\"0.35em\" font-family=\"Helvetica\" font-size=\"1.875em\">"
+        working_html_document.write(output_string)
+        working_html_document.write(outer_letters[2].upper())
+        output_string = "</text></svg ><svg class=\"hive-cell outer\" viewBox=\"0 0 120 103.92304845413263\" ><polygon class=\"cell-fill\" points=\"0,51.96152422706631 30,0 90,0 120,51.96152422706631 90,103.92304845413263 30,103.92304845413263\" stroke=\"white\" stroke-width=\"7.5\"></polygon ><text class=\"cell-letter\" x=\"50%\" y=\"50%\" dx=\"-0.25em\" dy=\"0.35em\" font-family=\"Helvetica\" font-size=\"1.875em\">"
+        working_html_document.write(output_string)
+        working_html_document.write(outer_letters[3].upper())
+        output_string = "</text></svg ><svg class=\"hive-cell outer\" viewBox=\"0 0 120 103.92304845413263\" ><polygon class=\"cell-fill\" points=\"0,51.96152422706631 30,0 90,0 120,51.96152422706631 90,103.92304845413263 30,103.92304845413263\" stroke=\"white\" stroke-width=\"7.5\"></polygon ><text class=\"cell-letter\" x=\"50%\" y=\"50%\" dx=\"-0.25em\" dy=\"0.35em\" font-family=\"Helvetica\" font-size=\"1.875em\">"
+        working_html_document.write(output_string)
+        working_html_document.write(outer_letters[4].upper())
+        output_string = "</text></svg ><svg class=\"hive-cell outer\" viewBox=\"0 0 120 103.92304845413263\" ><polygon class=\"cell-fill\" points=\"0,51.96152422706631 30,0 90,0 120,51.96152422706631 90,103.92304845413263 30,103.92304845413263\" stroke=\"white\" stroke-width=\"7.5\"></polygon ><text class=\"cell-letter\" x=\"50%\" y=\"50%\" dx=\"-0.25em\" dy=\"0.35em\" font-family=\"Helvetica\" font-size=\"1.875em\">"
+        working_html_document.write(output_string)
+        working_html_document.write(outer_letters[5].upper())
+        output_string = "</text></svg ></div ></body></html>"
+        working_html_document.write(output_string)
+
+    # Convert the generated HTML into a PNG
+    hti = Html2Image()
+    hti.screenshot(html_file=SPELLING_BEE_HTML, css_file=SPELLING_BEE_CSS, save_as=SPELLING_BEE_PNG, size=(305, 300))
+
+    # Prepare the local file so it can be output via Discord
+    file = discord.File(SPELLING_BEE_PNG)
+
+    # Build the embed
+    embed = discord.Embed(title = "NYT DAILY SPELLING BEE", color=0x0077ff)
     
+    # Build the embed's image and footer strings
+    today = datetime.date.today()
+    footer_string = "Day of " + today.strftime("%d %B %Y") + "\n" + url
+    image_string = "attachment://" + SPELLING_BEE_PNG
+    embed.set_image(url = image_string)
+    embed.set_footer(text = footer_string)
+
+    # Print the puzzle solutions, regardless of however many there may be
+    output_string_interim = ""
+    count = 1
+    for i in answers:
+        output_string_interim = output_string_interim + "(" + str(count) + "): ||" + i + "||\n"
+        count += 1
+    output_string = "```cs\n# PUZZLE SOLUTIONS #```\n" + output_string_interim
+
+    embed.add_field(name = "\u200b", value = output_string, inline = False)
+
+    channel = client.get_channel(int(channel_id))
+
+    await channel.send(file = file, embed = embed)
+
+# find_ao3_line  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Selects a random line number from an AO3 HTML dump and prints it to Discord.
+# INPUTS:
+#       - (string array) chapter_content: the entirety of the AO3 webpage, broken up into chapters (skipping index 0 in the list), and processed to remove HTML artifacts
+#       - (DISCORD CLASS) message: the metadata of the trigger message, used to respond in the same channel
+#       - (string) url: the site URL, used as a backup in event of failed processing
+# RETURNS:
+#       - N/A
+async def find_ao3_line(chapter_content, message, url):
+    # Check to see if the AO3 site being processed is a oneshot or chaptered - if chaptered, continue
+    if int(len(chapter_content) - 1) > 1:
+        # Randomly pick a chapter to pull a line from
+        selected_chapter_number = 1000000
+        while selected_chapter_number > (len(chapter_content) - 1):
+            selected_chapter_number = random.randint(1, len(chapter_content) - 1)
+
+        # Verify that there isn't a problem with chapter_content
+        if chapter_content is not None:
+            # Process all lines in that chapter
+            line_choices = chapter_content[selected_chapter_number - 1].split("</p><p>") 
+        # If there is, start over with another line
+        else:
+            process_ao3_html(url)
+    # If a oneshot, continue
+    else:
+        # Verify that there isn't a problem with chapter_content
+        if chapter_content is not None:
+            line_choices = chapter_content[0].split("</p><p>")
+        # If there is, start over with another line
+        else:
+            process_ao3_html(url)
+
+    # Randomly select a line from the generated list
+    selected_line_number = 1000000
+    while selected_line_number > (len(line_choices) - 1):
+        selected_line_number = random.randint(0, len(line_choices) - 1)
+
+    # Retrieve the channel name of the location where the command message was sent
+    channel = message.channel
+
+    # Post result to Discord
+    await channel.send(line_choices[selected_line_number]) 
+
+# list_all_metadata  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Displays all configuration keys and their currently assigned values to the user.
+# INPUTS:
+#       - (DISCORD CLASS) message: the sender's original message with all of its metadata (used for printing to the same channel)
+# RETURNS:
+#       - N/A
+async def list_configuration(message):
+    # Initialize configparser
+    config = configparser.ConfigParser()
+    config.read(CONFIG_FILENAME)
+
+    output_message = ""
+
+    # Build up embed
+    embed = discord.Embed(title = "EndoBot - Current Configuration", description = "*For more information, visit the bot's [GitHub page](https://github.com/jadonmann/EndoBot).*", color=0x0077ff)
+
+    for (key, val) in config.items(GUILD_ID):
+        output_message = output_message + "%s: `%s`\n" % (key, val)
+
+    embed.add_field(name = "\u200b", inline = False, value = output_message)
+
+    channel = message.channel
+    await channel.send(embed = embed)
+
 # ------------------------------------------------------------------------------------ EMBED FUNCTIONS #
 # ==================================================================================================== #
 
@@ -660,7 +1173,7 @@ async def leaderboard(receipts_filename, message):
 # INPUTS:
 #       - (DISCORD CLASS) message: the raw input message with metadata and preserved capitalcase
 #       - (DISCORD CLASS) command_string: the all-lowercase copy of the original message, specifically to make parsing command strings easier
-# OUTPUTS:
+# RETURNS:
 #       N/A 
 async def bot_command_processor(message, command_string):
     channel = message.channel
@@ -673,7 +1186,7 @@ async def bot_command_processor(message, command_string):
 
     mod = False
 
-    # Check if the user is a moderator/has admit privileges
+    # Check if the user is a moderator/has admin privileges
     if message.author.guild_permissions.administrator:
         mod = True
     else:
@@ -689,7 +1202,7 @@ async def bot_command_processor(message, command_string):
             if number_of_elements > 2:
                 if command_array[2] == "add":
                     if mod == True:
-                        if message.content.find("["):
+                        if message.content.count("[") == 3 and message.content.count("]") == 3:
                             # Process message string for bracket notation and filter out inputs
                             new_string = message.content.split("] [")
                             if new_string[0].find(" [") != -1:
@@ -699,7 +1212,7 @@ async def bot_command_processor(message, command_string):
                             end_0 = len(new_string[0])
                             
                             # Make sure there's not a problem with and of the "find"s - aka there was a problem with the input string
-                            if start_0 == -1 or end_0 == -1:
+                            if start_0 == -1 or end_0 == 0:
                                 # Send an error message to the user 
                                 status = -1
                             else:
@@ -716,10 +1229,11 @@ async def bot_command_processor(message, command_string):
                                 # If all information is properly constructed, add the hotword
                                 status, response = add_hotword(HOTWORDS_FILENAME, command, bot_response, tag_author)
                                 await channel.send(response)
+                        else:
+                            status = -1
                     else:
                         status = -1
                         response = "Sorry, you lack the necessary permissions to use this command."
-
                 elif command_array[2] == "delete":
                     if mod == True:
                         if message.content.find("["):
@@ -732,22 +1246,88 @@ async def bot_command_processor(message, command_string):
                     else:
                         status = -1
                         response = "Sorry, you lack the necessary permissions to use this command."
-
                 elif command_array[2] == "list":
                     status, response = await list_hotwords(HOTWORDS_FILENAME, message)
         elif command_array[1] == "leaderboard":
             status, response = await leaderboard(RECEIPTS_FILENAME, message)
+        elif command_array[1] == "sprintstats":
+            status, response = await sprint_leaderboard(SPRINT_BOT_COUNTER, message)
         elif command_array[1] == "help":
             status, response = await bot_help(message)
         elif command_array[1] == "randomizer":
+            if number_of_elements > 2:
+                status = 0
+                chapter_content = process_ao3_html(command_array[2])
+                await find_ao3_line(chapter_content, message, command_array[2])
+            else:
+                status = -1
+                response = "You're missing a URL!"
+        elif command_array[1] == "spellingbee":
+            await spelling_bee_printer(int(message.channel.id))
+        elif command_array[1] == "reveal":
+            if mod == True:
+                output_string = "**[[DEBUG]]**\n------> Message metadeta: %s\n\n------> Current channel: %s" % (message, message.channel.id)
+                await message.channel.send(output_string)
+            else:
+                status = -1
+                response = "Sorry, you lack the necessary permissions to use this command."
+        elif command_array[1] == "debug":
+            ## PLACE COMMANDS UNDER DEVELOPMENT HERE ##
+            test = 123
+
+        elif command_array[1] == "reboot":
+            if mod == True:
+                await channel.send("Rebooting EndoBot....")
+                await on_ready()
+                await channel.send("EndoBot rebooted!")
+            else:
+                status = -1
+                response = "Sorry, you lack the necessary permissions to use this command."
+        elif command_array[1] == "config":
+            if mod == True:
+                if number_of_elements > 2:
+                    # Check to see if user wants to list all metadata
+                    if command_array[2] == "list":
+                        await list_configuration(message)
+
+                    # Otherwise, check to see if the user is trying to change a metadata
+                    else:
+                        if number_of_elements > 3:
+                            if message.content.count("[") == 2 and message.content.count("]") == 2:
+                                # Process message string for bracket notation and filter out inputs
+                                new_string = message.content.split("] [")
+                                if new_string[0].find(" [") != -1:
+                                    start_0 = new_string[0].find(" [") + len(" [")
+                                else:
+                                    start_0 = -1
+                                end_0 = len(new_string[0])
+                                
+                                # Make sure there's not a problem with and of the "find"s - aka there was a problem with the input string
+                                if start_0 == -1 or end_0 == 0:
+                                    # Send an error message to the user 
+                                    status = -1
+                                else:
+                                    # Finish constructing command list
+                                    config_category = new_string[0][start_0:end_0]
+                                    new_value = new_string[1].replace("]","")
+
+                                    status, response = change_configuration(config_category, new_value)
+                                    await channel.send(response)
+                            else:
+                                status = -1
+                        else:
+                            status = -1
+
+            else:
+                status = -1
+                response = "Sorry, you lack the necessary permissions to use this command."
+        else:
             status = -1
-            response = "This command has not yet been implemented!"
+    else:
+        status = -1
 
     if status == -1:
         await channel.send(response)
-
-
-
 
 # ----------------------------------------------------------------------------------- !EB BOT COMMANDS #
 # ==================================================================================================== #
@@ -760,15 +1340,32 @@ async def bot_command_processor(message, command_string):
 # Startup  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 @client.event
 async def on_ready():
-    # Check and Build New Configuration Files
+    # Initialize ini reader
+    config = configparser.ConfigParser()
 
-    print(f'{client.user.name} has connected to Discord!')
+    # Load in configuration file
+    configuration_file = config.read(CONFIG_FILENAME)
+    if not configuration_file:
+        print("INITIALIZATION ERROR: %s file not found." % (CONFIG_FILENAME))
+        quit()
+    else:
+        # Initialize the bot and bot variables
+        error = initialize_bot(CONFIG_FILENAME, GUILD_ID)
+        if error != 0:
+            print("INITIALIZATION ERROR: loading of %s exited with Error Code %d." % (CONFIG_FILENAME, error))
+            quit()
 
-# Message detection wrapper  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+        # Begin scheduler timer
+        client.loop.create_task(background_task())
+
+        # Print message stating that the bot has connected to Discord
+        print(f'{client.user.name} has connected to Discord!')
+
+# Message Detection Wrapper  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 @client.event
 async def on_message(message):
     # Print debug line to console
-    print(f'Message detected: @{message.author} in #{message.channel}: {message.content}\n')
+    print(f'Message detected: @{message.author} in #{message.channel}: {message.content}')
 
     # Convert message to all lower-case for easier sorting (if set to do so in configuration file)
     if(RESPONSE_FLAG_CASE_SENSITIVE == "No"):
@@ -781,14 +1378,6 @@ async def on_message(message):
         # Search for response flags
         if formatted_message.startswith("!eb"):
             await bot_command_processor(message, formatted_message)
-
-        elif formatted_message == 'eb_test':
-            output_string = "**[[DEBUG]]**\n------> ..."
-            await message.channel.send(output_string)
-
-        elif formatted_message == 'eb_reveal': 
-            output_string = "**[[DEBUG]]**\n------> Message metadeta: %s\n\n------> Current channel: %s" % (message, message.channel.id)
-            await message.channel.send(output_string)
 
         # Check for response flag contents if they are the entirety of the text - if so, do not @ the poster
         elif formatted_message == RESPONSE_FLAG.lower() and RESPONSE_FLAG_CASE_SENSITIVE != "Yes":
@@ -811,7 +1400,8 @@ async def on_message(message):
             line = find_line(FILENAME)
             await message.channel.send('{0.author.mention} '.format(message) + line)
         
-        elif formatted_message == 'honque':
+        # Generate a machine learning response based on the starboard file
+        elif formatted_message == MACHINE_LEARNING_RESPONSE_FLAG:
             machine_learning = open(FILENAME, encoding='utf8').read()
             machine_learning_wordsplit = machine_learning.split()
 
@@ -851,6 +1441,19 @@ async def on_message(message):
                         
                         break
 
+    # Check to see if @Sprinto was the tweeter          
+    if message.author.id == int("421646775749967872"):
+        # Check message to see if it is an end-of-sprint message
+        if message.content.find("🏆 **CONGRATS EVERYONE**") != -1:
+            # Process sprint values and add to total counter
+            status, response = sprint_bot_word_count_processor(message.content, SPRINT_BOT_COUNTER)
+            # If there were no problems, also print out the current leaderboard
+            if status == 0 and (SPRINT_BOT_AUTOTRIGGER == "Yes" or SPRINT_BOT_AUTOTRIGGER == "yes"):
+                await sprint_leaderboard(SPRINT_BOT_COUNTER, message)
+        
+
+
+
 # Starboard Emoji Reaction Parser  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 @client.event
 async def on_raw_reaction_add(payload):
@@ -884,6 +1487,7 @@ async def on_raw_reaction_add(payload):
                         response_id = row[2]
                         break
 
+            # If the post already exists, then edit the message rather than create a new one
             if post_already_exists_flag == 1:
                 await edit_starboard_message(payload, output_channel, message, count, response_id)
             else:
@@ -900,13 +1504,49 @@ async def on_raw_reaction_add(payload):
                         output_message = "%s\n" % (message.content)
                         sinbin.write(output_message)
 
+# Post Scheduler - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+@tasks.loop(hours=24)
+async def called_once_a_day():
+    await client.wait_until_ready()
+    await spelling_bee_printer(SPELLING_BEE_OUTPUT_CHANNEL_ID)
 
-client.run(TOKEN)
+async def background_task():
+    # Build up the daily message time value from numbers acquired in the configuration.ini file
+    sb_status, sb_hour, sb_minute, sb_second = time_processor(SPELLING_BEE_POST_TIME)
+    if sb_status == 0:
+        DAILY_MESSAGE_TIME = datetime.time(sb_hour, sb_minute, sb_second)      
+
+    # Run in a continuous loop
+    while True:
+        # Obtain the current time
+        now = datetime.datetime.utcnow()
+
+        # Calculate how long it will be until the next trigger time
+        target_time = datetime.datetime.combine(now.date(), DAILY_MESSAGE_TIME)
+        seconds_until_target = (target_time - now).total_seconds()
+
+        # If the trigger time is the next calendar day, add in a full day of seconds to the timer
+        if seconds_until_target <= 0:
+            seconds_until_target = 86400 + seconds_until_target
+
+        print("SCHEDULER FUNCTION: the current time is %s. The scheduled time is %s, which is in appx. %s seconds." % (now, DAILY_MESSAGE_TIME, str(seconds_until_target)))
+
+        # Tell the bot to wait that many seconds
+        await asyncio.sleep(seconds_until_target)
+
+        # Once waited, execute the daily scheduled function - with an added check to make sure that it's not an accidental misfire
+        now_validate = datetime.datetime.utcnow()
+        target_time_validate = datetime.datetime.combine(now_validate.date(), DAILY_MESSAGE_TIME)
+        seconds_until_target_validate = (target_time_validate - now_validate).total_seconds()
+        if abs(seconds_until_target_validate - seconds_until_target) < 100:
+            await called_once_a_day()
+
+        # A ten-second delay after execution to give the scheduled function enough time to parse through large HTML files
+        await asyncio.sleep(10)
+
+# INIT - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+if __name__ == "__main__":
+    client.run(TOKEN)
+
 # --------------------------------------------------------------------- ACTIVE DISCORD ASYNC FUNCTIONS #
 # ==================================================================================================== #
-
-
-
-
-
-

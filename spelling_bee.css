@@ -1,0 +1,28 @@
+.sb-hive{width:90%;margin:25px auto;-webkit-tap-highlight-color:white;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;user-select:none}
+.hive{position:relative;width:100%;padding-bottom:103.92305%}
+/* .hive .cell-letter{font-weight:700;font-size:1.875em;text-anchor:middle;text-transform:uppercase;pointer-events:none} */
+.hive.shuffling .outer>.cell-letter{opacity:0}
+.hive.fade-out .outer>.cell-letter{opacity:0;transition:opacity .3s}
+.hive.fade-in .outer>.cell-letter{opacity:1;transition:opacity .3s}
+.hive-cell{position:absolute;top: 100px;left: 100px;width:104.39px;height: 90.41px}
+.hive-cell .cell-fill{cursor:pointer;fill:#e6e6e6;transition:all 100ms}
+.hive-cell .cell-fill.push-active{fill:#d9d9d9}
+.hive-cell:first-child .cell-fill{cursor:pointer;fill:#f7da21;transition:all 100ms}
+.hive-cell:first-child .cell-fill.push-active{fill:#f6d609}
+.hive-cell>.cell-fill.push-active{transform:scale3d(0.86, 0.86, 1);transform-origin:center center}
+.hive-cell:nth-child(1){transform:translate(0, 0)}
+.hive-cell:nth-child(2){transform:translate(-75%, -50%)}
+.hive-cell:nth-child(3){transform:translate(0, -100%)}
+.hive-cell:nth-child(4){transform:translate(75%, -50%)}
+.hive-cell:nth-child(5){transform:translate(75%, 50%)}
+.hive-cell:nth-child(6){transform:translate(0, 100%)}
+.hive-cell:nth-child(7){transform:translate(-75%, 50%)}
+.hive-actions{text-align:center;align-items:flex-start;justify-content:center;flex-wrap:nowrap}
+.hive-actions .hive-action__delete{order:1}
+.hive-actions .hive-action__shuffle{order:2}
+.hive-actions .hive-action__submit{order:3}
+.hive-actions.vertical{display:block}
+.hive-actions.vertical .hive-action{margin:0 auto 8px}
+.hive-action{display:flex;justify-content:center;align-items:center;padding:15px 0;width:5.5em;min-width:5.5em;height:3em;background-color:white;font-size:1em;margin:0 8px;color:#333;border:1px solid #dcdcdc;border-radius:2.5em;letter-spacing:0.01em;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;user-select:none;cursor:pointer}
+.hive-action.push-active,.hive-action.action-active{background-color:#ededed}
+.hive-action__shuffle{background:url("./assets/shuffle.svg") center no-repeat;background-size:60%;height:3em;width:3em;min-width:3em}
