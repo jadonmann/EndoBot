@@ -11,6 +11,9 @@ Install the following Python dependencies on your system before running EndoBot:
  * `httplib2`
  * `numpy`
  * `oauth2client`
+ * `opencv-python`
+ * `html2image`
+ * `requests`
 
 ## Bot Setup
 #### IDEs and Hosting the Bot Locally
