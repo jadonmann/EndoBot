@@ -1,0 +1,22 @@
+`!eb trigger add [trigger phrase] [bot response] [Message the sender? Yes/No]`␝Yes␝Yes
+`!eb trigger delete [trigger phrase]`␝Yes␝Yes
+`!eb trigger list`␝No␝No
+`!eb leaderboard`␝No␝No
+`!eb sprintstats edit [+/-value] [Discord ID or @]`␝Yes␝No
+`!eb sprintstats forceupdate`␝No␝Yes
+`!eb sprintstats leaderboard`␝No␝No
+`!eb help`␝No␝No
+`!eb fullhelp`␝No␝No
+`!eb randomizer [media name]`␝No␝No
+`!eb config [configuration option] [value]`␝Yes␝Yes
+`!eb config list`␝No␝Yes
+`!eb reboot`␝No␝Yes
+`!eb spellingbee`␝No␝No
+`!eb nanowrimo enroll [number]`␝No␝No
+`!eb nanowrimo withdraw`␝No␝No
+`!eb nanowrimo check`␝No␝No
+`!eb nanowrimo enable`␝No␝No
+`!eb nanowrimo disable`␝No␝Yes
+`!eb nanowrimo leaderboard`␝No␝No
+`!eb admin forcemorningmessages`␝No␝Yes
+`!eb welcome`␝No␝No
