@@ -4,14 +4,6 @@
 # Built using the Discord.py Python API
 # Written by JA Mann
 # 
-# Release 2022.01.24.B
-# Release Notes: 
-# - Added in functionality to print and display the daily NYT Spelling Bee Puzzle at a certain time every day
-# - Added in functionality to view and change configuration file parameters
-# - Added in functionality to keep track of all words sprinted using the @Sprinto bot
-# - Added in functionality to pull a random line from an AO3 fanfiction (still in development)
-#                   
-#
 # ============================================================================================ ENDOBOT #
 ########################################################################################################
 
@@ -22,9 +14,11 @@
 # IMPORTS AND GLOBAL VARIABLES ----------------------------------------------------------------------- #
 
 from __future__ import print_function
+from cgi import test
+from xmlrpc.server import CGIXMLRPCRequestHandler
 #from asyncio.windows_events import NULL
 from async_timeout import asyncio
-from cv2 import line
+from cv2 import estimateChessboardSharpness, line
 from discord.ext import commands, tasks
 from discord.utils import get
 from oauth2client import client
@@ -36,10 +30,15 @@ import numpy as np
 import datetime
 import csv
 import re
+import shutil
+import os
 
 import requests
 from html2image import Html2Image
 import configparser
+
+import nanowrimo
+import dataprocessing
 
 # Enables ability to check member IDs within a server (used for Leaderboard functionality)
 # This requires a specific permission through Discord's API and will need to be renewed periodically
@@ -50,33 +49,46 @@ client = discord.Client(intents=intents)
 
 URL_REGEX = r"""(?i)\b((?:https?:(?:/{1,3}|[a-z0-9%])|[a-z0-9.\-]+[.](?:com|net|org|edu|gov|mil|aero|asia|biz|cat|coop|info|int|jobs|mobi|museum|name|post|pro|tel|travel|xxx|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cs|cu|cv|cx|cy|cz|dd|de|dj|dk|dm|do|dz|ec|ee|eg|eh|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mm|mn|mo|mp|mq|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|om|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ro|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|Ja|sk|sl|sm|sn|so|sr|ss|st|su|sv|sx|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw)/)(?:[^\s()<>{}\[\]]+|\([^\s()]*?\([^\s()]+\)[^\s()]*?\)|\([^\s]+?\))+(?:\([^\s()]*?\([^\s()]+\)[^\s()]*?\)|\([^\s]+?\)|[^\s`!()\[\]{};:'".,<>?«»“”‘’])|(?:(?<!@)[a-z0-9]+(?:[.\-][a-z0-9]+)*[.](?:com|net|org|edu|gov|mil|aero|asia|biz|cat|coop|info|int|jobs|mobi|museum|name|post|pro|tel|travel|xxx|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cs|cu|cv|cx|cy|cz|dd|de|dj|dk|dm|do|dz|ec|ee|eg|eh|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mm|mn|mo|mp|mq|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|om|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ro|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|Ja|sk|sl|sm|sn|so|sr|ss|st|su|sv|sx|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw)\b/?(?!@)))"""
 
-TOKEN = "Your_Token_Here"
+TOKEN = None
+
+# SYSTEM FILEPATHS - DO NOT MODIFY
+TOKEN_FILENAME = "token.txt"
 CONFIG_FILENAME = "configuration.ini"
-GUILD_ID = "Your_Guild_ID_Here"
+DEFAULTS_FOLDER = "Init"
+SERVERS_FOLDER = "Servers"
 
-FILENAME = None
-RECEIPTS_FILENAME = None
-STARBOARD_OUTPUT_CHANNEL_ID = None
-STARBOARD_REACTION_THRESHOLD = None
-STARBOARD_EMOJI_DELIMITER = None
-RESPONSE_FLAG = None
-RESPONSE_FLAG_CASE_SENSITIVE = None
-RESPONSE_FLAG_MATCH_EXACT_CASE = None
-LOADED_EXTERNAL_MEDIA_CONFIG_FILENAME = None
-HOTWORDS_FILENAME = None
-MACHINE_LEARNING_RESPONSE_FLAG = None
-SPELLING_BEE_URL = None
-SPELLING_BEE_OUTPUT_CHANNEL_ID = None
-SPELLING_BEE_AUTO_POST = None
-SPELLING_BEE_POST_TIME = None
-SPELLING_BEE_HTML = None
-SPELLING_BEE_CSS = None
-SPELLING_BEE_PNG = None
-SPRINT_BOT_COUNTER = None
-SPRINT_BOT_AUTOTRIGGER = None
+GUILD_ID = list()
+SYSTEM_CHANNEL = list()
+STARBOARD_FUNCTION_ENABLE = list()
+STARBOARD_FILENAME = list()
+STARBOARD_RECEIPTS_FILENAME = list()
+STARBOARD_OUTPUT_CHANNEL_ID = list()
+STARBOARD_REACTION_THRESHOLD = list()
+STARBOARD_EMOJI_DELIMITER = list()
+RESPONSE_FLAG = list()
+RESPONSE_FLAG_CASE_SENSITIVE = list()
+RESPONSE_FLAG_MATCH_EXACT_CASE = list()
+LOADED_EXTERNAL_MEDIA_CONFIG_FILENAME = list()
+HOTWORDS_FILENAME = list()
+HOTWORDS_DELIMITER = list()
+MACHINE_LEARNING_RESPONSE_FLAG = list()
+SPELLING_BEE_URL = list()
+SPELLING_BEE_OUTPUT_CHANNEL_ID = list()
+SPELLING_BEE_AUTO_POST = list()
+SPELLING_BEE_POST_TIME = list()
+SPELLING_BEE_HTML = list()
+SPELLING_BEE_CSS = list()
+SPELLING_BEE_PNG = list()
+SPRINT_BOT_COUNTER = list()
+SPRINT_BOT_INDIVIDUAL_COUNTER_FOLDER = list()
+SPRINT_BOT_AUTOTRIGGER = list()
+NANOWRIMO_MODE_ENABLED = list()
+SCHEDULER_FILENAME = list()
+COMMAND_LIST_FILENAME = list()
 
-DAILY_MESSAGE_TIME = None
+DAILY_MESSAGE_SCHEDULER_CURRENT_STATE = list()
 
+MESSAGE_SCHEDULER_INIT_FLAG = None
 
 # ----------------------------------------------------------------------- IMPORTS AND GLOBAL VARIABLES #
 # ==================================================================================================== #
@@ -86,17 +98,43 @@ DAILY_MESSAGE_TIME = None
 # ==================================================================================================== #
 # INITIALIZATIONS ------------------------------------------------------------------------------------ #
 
-# initialize_bot - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
-# Initializes the bot with configuration information read from an INI file
+# load_bot_token - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Grabs bot token from tokens file
+# INPUTS:
+#       - (string) token_filename: the filename where the token is stored
+# RETURNS:
+#       - (string) token: returns the token
+def load_bot_token(token_filename):
+    with open(token_filename, "r") as loaded_file:
+        for line in loaded_file:
+            return line
+
+# set_scheduler  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Runs at first startup and sets the variable MESSAGE_SCHEDULER_INIT_FLAG as a global variable with integer value 0.
+# This only runs once per bot startup. It is used to verify whether the scheduler has been initialized as intended,
+# as the bot will "re-initialize" itself if it loses internet connectivity or locks up for some reason, and we don't
+# want new scheduler functions to run in those circumstances.
+# INPUTS:
+#       - (bool) value: the value to set the scheduler state to: 1 if already on, 0 if off
+# RETURNS:
+#       - N/A
+def set_scheduler(value):
+    global MESSAGE_SCHEDULER_INIT_FLAG
+    MESSAGE_SCHEDULER_INIT_FLAG = value
+
+# initialize_bot_globals - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Initializes the bot with configuration information read from an INI file and populates the global variable lists
 # INPUTS:
 #       - (string) config_filename: the master configuration file name
 #       - (string) servername: the name of the server to search for in the configuration file INI structure
 # RETURNS:
 #       - (int) error: returns an error code if there's a problem, 0 otherwise
-
-def initialize_bot(config_filename, servername):
-    global FILENAME
-    global RECEIPTS_FILENAME
+def initialize_bot_globals(config_filename, servername):
+    global GUILD_ID
+    global SYSTEM_CHANNEL
+    global STARBOARD_FUNCTION_ENABLE
+    global STARBOARD_FILENAME
+    global STARBOARD_RECEIPTS_FILENAME
     global STARBOARD_OUTPUT_CHANNEL_ID
     global STARBOARD_REACTION_THRESHOLD
     global STARBOARD_EMOJI_DELIMITER
@@ -105,6 +143,7 @@ def initialize_bot(config_filename, servername):
     global RESPONSE_FLAG_MATCH_EXACT_CASE
     global LOADED_EXTERNAL_MEDIA_CONFIG_FILENAME
     global HOTWORDS_FILENAME
+    global HOTWORDS_DELIMITER
     global MACHINE_LEARNING_RESPONSE_FLAG
     global SPELLING_BEE_URL
     global SPELLING_BEE_OUTPUT_CHANNEL_ID
@@ -114,78 +153,253 @@ def initialize_bot(config_filename, servername):
     global SPELLING_BEE_CSS
     global SPELLING_BEE_PNG
     global SPRINT_BOT_COUNTER
+    global SPRINT_BOT_INDIVIDUAL_COUNTER_FOLDER
     global SPRINT_BOT_AUTOTRIGGER
+    global NANOWRIMO_MODE_ENABLED
+    global SCHEDULER_FILENAME
+    global COMMAND_LIST_FILENAME
 
-    global DAILY_MESSAGE_TIME
+    global DAILY_MESSAGE_SCHEDULER_CURRENT_STATE
     
     exists = 0
     
-    exists, FILENAME = read_ini_file(config_filename, servername, "starboard_filename")
+    GUILD_ID.append(servername)
+
+    # Only initialize the scheduler init flag on the very first run after the bot is rebooted
+    if MESSAGE_SCHEDULER_INIT_FLAG == 0:
+        DAILY_MESSAGE_SCHEDULER_CURRENT_STATE.append(int(0))
+
+    exists, current_value = read_ini_file(config_filename, servername, "starboard_function_enable")
+    if exists == -1:
+        return -1
+    STARBOARD_FUNCTION_ENABLE.append(current_value)   
+
+    exists, current_value = read_ini_file(config_filename, servername, "system_channel")
     if exists == -1:
         return -2
-    exists, RECEIPTS_FILENAME = read_ini_file(config_filename, servername, "starboard_receipts")
+    SYSTEM_CHANNEL.append(int(current_value)) 
+
+    exists, current_value = read_ini_file(config_filename, servername, "starboard_filename")
     if exists == -1:
         return -3
-    exists, STARBOARD_OUTPUT_CHANNEL_ID = read_ini_file(config_filename, servername, "starboard_output_channel_id")
+    STARBOARD_FILENAME.append("Servers/" + str(servername) + "/" + current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "starboard_receipts_filename")
     if exists == -1:
         return -4
-    exists, STARBOARD_REACTION_THRESHOLD = read_ini_file(config_filename, servername, "starboard_reaction_threshold")
+    STARBOARD_RECEIPTS_FILENAME.append("Servers/" + str(servername) + "/" + current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "starboard_output_channel_id")
     if exists == -1:
         return -5
-    exists, STARBOARD_EMOJI_DELIMITER = read_ini_file(config_filename, servername, "starboard_emoji_delimiter")
+    STARBOARD_OUTPUT_CHANNEL_ID.append(int(current_value))
+
+    exists, current_value = read_ini_file(config_filename, servername, "starboard_reaction_threshold")
     if exists == -1:
         return -6
-    exists, RESPONSE_FLAG = read_ini_file(config_filename, servername, "response_flag")
+    STARBOARD_REACTION_THRESHOLD.append(int(current_value))
+
+    exists, current_value = read_ini_file(config_filename, servername, "starboard_emoji_delimiter")
     if exists == -1:
         return -7
-    exists, RESPONSE_FLAG_CASE_SENSITIVE = read_ini_file(config_filename, servername, "response_flag_case_sensitive")
+    STARBOARD_EMOJI_DELIMITER.append(current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "response_flag")
     if exists == -1:
         return -8
-    exists, RESPONSE_FLAG_MATCH_EXACT_CASE = read_ini_file(config_filename, servername, "response_flag_match_exact_case")
+    RESPONSE_FLAG.append(current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "response_flag_case_sensitive")
     if exists == -1:
         return -9
-    exists, LOADED_EXTERNAL_MEDIA_CONFIG_FILENAME = read_ini_file(config_filename, servername, "loaded_external_media_config_filename")
+    RESPONSE_FLAG_CASE_SENSITIVE.append(current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "response_flag_match_exact_case")
     if exists == -1:
         return -10
-    exists, HOTWORDS_FILENAME = read_ini_file(config_filename, servername, "hotwords_filename")
+    RESPONSE_FLAG_MATCH_EXACT_CASE.append(current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "loaded_external_media_config_filename")
     if exists == -1:
         return -11
-    exists, MACHINE_LEARNING_RESPONSE_FLAG = read_ini_file(config_filename, servername, "machine_learning_response_flag")
+    LOADED_EXTERNAL_MEDIA_CONFIG_FILENAME.append("Servers/" + str(servername) + "/" + current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "hotwords_filename")
     if exists == -1:
         return -12
-    exists, SPELLING_BEE_URL = read_ini_file(config_filename, servername, "spelling_bee_url")
+    HOTWORDS_FILENAME.append("Servers/" + str(servername) + "/" + current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "hotwords_delimiter")
     if exists == -1:
         return -13
-    exists, SPELLING_BEE_OUTPUT_CHANNEL_ID = read_ini_file(config_filename, servername, "spelling_bee_output_channel_id")
+    HOTWORDS_DELIMITER.append(current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "machine_learning_response_flag")
     if exists == -1:
         return -14
-    exists, SPELLING_BEE_AUTO_POST = read_ini_file(config_filename, servername, "spelling_bee_auto_post")
+    MACHINE_LEARNING_RESPONSE_FLAG.append(current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "spelling_bee_url")
     if exists == -1:
         return -15
-    exists, SPELLING_BEE_POST_TIME = read_ini_file(config_filename, servername, "spelling_bee_post_time")
+    SPELLING_BEE_URL.append(current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "spelling_bee_output_channel_id")
     if exists == -1:
         return -16
-    exists, SPELLING_BEE_HTML = read_ini_file(config_filename, servername, "spelling_bee_html")
+    SPELLING_BEE_OUTPUT_CHANNEL_ID.append(int(current_value))
+
+    exists, current_value = read_ini_file(config_filename, servername, "spelling_bee_auto_post")
     if exists == -1:
         return -17
-    exists, SPELLING_BEE_CSS = read_ini_file(config_filename, servername, "spelling_bee_css")
+    SPELLING_BEE_AUTO_POST.append(current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "spelling_bee_post_time")
     if exists == -1:
         return -18
-    exists, SPELLING_BEE_PNG = read_ini_file(config_filename, servername, "spelling_bee_png")
+    SPELLING_BEE_POST_TIME.append(current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "spelling_bee_html")
     if exists == -1:
         return -19
-    exists, SPRINT_BOT_COUNTER = read_ini_file(config_filename, servername, "sprint_bot_counter")
+    SPELLING_BEE_HTML.append(current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "spelling_bee_css")
     if exists == -1:
         return -20
-    exists, SPRINT_BOT_AUTOTRIGGER = read_ini_file(config_filename, servername, "sprint_bot_autotrigger")
+    SPELLING_BEE_CSS.append(current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "spelling_bee_png")
     if exists == -1:
         return -21
+    SPELLING_BEE_PNG.append(current_value)
 
-    STARBOARD_OUTPUT_CHANNEL_ID = int(STARBOARD_OUTPUT_CHANNEL_ID)
-    STARBOARD_REACTION_THRESHOLD = int(STARBOARD_REACTION_THRESHOLD)
-    SPELLING_BEE_OUTPUT_CHANNEL_ID = int(SPELLING_BEE_OUTPUT_CHANNEL_ID)
+    exists, current_value = read_ini_file(config_filename, servername, "sprint_bot_counter")
+    if exists == -1:
+        return -22
+    SPRINT_BOT_COUNTER.append("Servers/" + str(servername) + "/" + current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "sprint_bot_individual_counter_folder")
+    if exists == -1:
+        return -23
+    SPRINT_BOT_INDIVIDUAL_COUNTER_FOLDER.append("Servers/" + str(servername) + "/" + current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "sprint_bot_autotrigger")
+    if exists == -1:
+        return -24
+    SPRINT_BOT_AUTOTRIGGER.append(current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "nanowrimo_mode_enabled")
+    if exists == -1:
+        return -25
+    NANOWRIMO_MODE_ENABLED.append(current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "scheduler_filename")
+    if exists == -1:
+        return -26
+    SCHEDULER_FILENAME.append("Servers/" + str(servername) + "/" + current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "command_list_filename")
+    if exists == -1:
+        return -27
+    COMMAND_LIST_FILENAME.append(current_value)
     
     return 0
+
+# clear_global_variables - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Resets the global variable lists so they can be repopulated.
+# INPUTS:
+#       - N/A
+# RETURNS:
+#       - N/A
+def clear_global_variables():
+    GUILD_ID.clear()
+    SYSTEM_CHANNEL.clear()
+    STARBOARD_FUNCTION_ENABLE.clear()
+    STARBOARD_FILENAME.clear()
+    STARBOARD_RECEIPTS_FILENAME.clear()
+    STARBOARD_OUTPUT_CHANNEL_ID.clear()
+    STARBOARD_REACTION_THRESHOLD.clear()
+    STARBOARD_EMOJI_DELIMITER.clear()
+    RESPONSE_FLAG.clear()
+    RESPONSE_FLAG_CASE_SENSITIVE.clear()
+    RESPONSE_FLAG_MATCH_EXACT_CASE.clear()
+    LOADED_EXTERNAL_MEDIA_CONFIG_FILENAME.clear()
+    HOTWORDS_FILENAME.clear()
+    HOTWORDS_DELIMITER.clear()
+    MACHINE_LEARNING_RESPONSE_FLAG.clear()
+    SPELLING_BEE_URL.clear()
+    SPELLING_BEE_OUTPUT_CHANNEL_ID.clear()
+    SPELLING_BEE_AUTO_POST.clear()
+    SPELLING_BEE_POST_TIME.clear()
+    SPELLING_BEE_HTML.clear()
+    SPELLING_BEE_CSS.clear()
+    SPELLING_BEE_PNG.clear()
+    SPRINT_BOT_COUNTER.clear()
+    SPRINT_BOT_INDIVIDUAL_COUNTER_FOLDER.clear()
+    SPRINT_BOT_AUTOTRIGGER.clear()
+    NANOWRIMO_MODE_ENABLED.clear()
+    SCHEDULER_FILENAME.clear()
+    COMMAND_LIST_FILENAME.clear()
+
+# initialize_new_server  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Initializes a newly-connected Discord server by building its filepaths within the server's storage.
+# INPUTS:
+#       - (int) new_guild_id: the Discord guild ID for the new guild
+# RETURNS:
+#       - N/A
+def initialize_new_server(new_guild_id):
+    # Build filepaths for files to be duplicated - this part isn't strictly necessary but to ensure nothing acts strangely from missing files before they're properly generated, this part is included
+    default_external_media_file = DEFAULTS_FOLDER + "/external_media.csv"
+    default_hotwords_file = DEFAULTS_FOLDER + "/hotwords.csv"
+    default_receipts_file = DEFAULTS_FOLDER + "/receipts.csv"
+    default_sprint_counter_file = DEFAULTS_FOLDER + "/sprint_counter.csv"
+    default_starboard_file = DEFAULTS_FOLDER + "/starboard.txt"
+
+    # Build new server's file directory
+    interim_string = SERVERS_FOLDER + "/" + str(new_guild_id)
+    os.mkdir(interim_string)
+
+    # Build destination filepaths for copied files
+    new_external_media_file = SERVERS_FOLDER + "/" + str(new_guild_id) + "/external_media.csv"
+    new_hotwords_file = SERVERS_FOLDER + "/" + str(new_guild_id) + "/hotwords.csv"
+    new_receipts_file = SERVERS_FOLDER + "/" + str(new_guild_id) + "/receipts.csv"
+    new_sprint_counter_file = SERVERS_FOLDER + "/" + str(new_guild_id) + "/sprint_counter.csv"
+    new_starboard_file = SERVERS_FOLDER + "/" + str(new_guild_id) + "/starboard.txt"
+
+    # Copy files
+    shutil.copyfile(default_external_media_file, new_external_media_file)
+    shutil.copyfile(default_hotwords_file, new_hotwords_file)
+    shutil.copyfile(default_receipts_file, new_receipts_file)
+    shutil.copyfile(default_sprint_counter_file, new_sprint_counter_file)
+    shutil.copyfile(default_starboard_file, new_starboard_file)
+
+    # Build user sprint totals folder
+    interim_string = SERVERS_FOLDER + "/" + str(new_guild_id) + "/" + "User_Sprint_Totals"
+    os.mkdir(interim_string)
+
+    # Initialize configparser
+    config = configparser.ConfigParser()
+    config.read(CONFIG_FILENAME)
+
+    with open(CONFIG_FILENAME, "a") as config_file:
+        interim_string = "\n[" + str(new_guild_id) + "]"
+        print(interim_string, file=config_file)
+
+    all_keys = list()
+    all_vals = list()
+    iterator = 0
+
+    # Copy over default values to the new section
+    for (key, val) in config.items("DEFAULT_VALUES"):
+        all_keys.append(key)
+        all_vals.append(val)
+
+        with open(CONFIG_FILENAME, "a") as config_file:
+            interim_string = all_keys[iterator] + " = " + all_vals[iterator]
+            print(interim_string, file=config_file) 
+        
+        iterator += 1
 
 # ------------------------------------------------------------------------------------ INITIALIZATIONS #
 # ==================================================================================================== #
@@ -212,11 +426,27 @@ def read_ini_file(filename, section, key):
     else:
         return -1, -1
 
+# find_guild_position_number - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Finds the position in the configuration storage array 
+# INPUTS:
+#       - (int) current_id: the current guild ID
+# RETURNS:
+#       - (int) position: returns the position in the stored global variables array if successful, -1 if failure
+def find_guild_position_number(current_id):
+    position = 0
+    for i in GUILD_ID:
+        if int(i) == int(current_id):
+            return position
+        else:
+            position += 1
+    return -1
+
+
 # time_processor - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # Takes the user-given time value and converts it into integers that datetime can process
 # INPUTS:
 #       - (string) input_time: the time (formatted HH:MM:SS) in UTC
-# OUTPUTS:
+# RETURNS:
 #       - (bool) status: returns 0 if no problem, -1 if problem
 #       - (int) hour: the hour
 #       - (int) minute: the minute
@@ -236,14 +466,18 @@ def time_processor(input_time):
 # INPUTS:
 #       - (string) filename: the hotwords.csv filename
 #       - (string) hotword: the hotword to search for
+#       - (int) current_guild_id: the ID for the current guild. Used for global variable parsing.
 # RETURNS: 
 #       - (bool) hotword_already_exists: returns "1" if the hotword is found.
-def check_hotword(filename, hotword):
+def check_hotword(filename, hotword, current_guild_id):
+    # Find current guild position within stored global variables
+    f = find_guild_position_number(current_guild_id)
+
     hotword_already_exists = 0
     
     # Open the CSV file and prep it for Python parsing
     with open(filename, "r") as loaded_file:
-        loaded_read = csv.reader(loaded_file, delimiter = "🍔")
+        loaded_read = csv.reader(loaded_file, delimiter = HOTWORDS_DELIMITER[f])
 
         # Search for the hotword in each row
         for row in loaded_read:
@@ -259,10 +493,14 @@ def check_hotword(filename, hotword):
 #       - (string) hotword: the trigger word to be added
 #       - (string) response: the response from the bot
 #       - (bool) message_sender: should the sender be @'ed? "Yes" or "No"
+#       - (int) current_guild_id: the ID for the current guild. Used for global variable parsing.
 # RETURNS:
 #       - (bool) status: -1 if failed, 0 if successful
 #       - (string) output_message: the message given back to the bot to be printed to the user in-line (if necessary)
-def add_hotword(hotwords_filename, hotword, response, message_sender):
+def add_hotword(hotwords_filename, hotword, response, message_sender, current_guild_id):
+    # Find current guild position within stored global variables
+    f = find_guild_position_number(current_guild_id)
+
     status = 0
     output_message = ""
     output_message_to_CSV = ""
@@ -272,15 +510,15 @@ def add_hotword(hotwords_filename, hotword, response, message_sender):
         # Open file
         with open(hotwords_filename, "a") as loaded_file:
             # Prep the CSV file for Python parsing
-            loaded_write = csv.writer(loaded_file, delimiter = "🍔")
+            loaded_write = csv.writer(loaded_file, delimiter = HOTWORDS_DELIMITER[f])
 
             # Build output string to be appended to the file
             if message_sender == 1:
                 output_message = "Success! Trigger phrase `%s` will be responded to with the phrase `%s` and will message the sender." % (hotword, response)
-                output_message_to_CSV = "%s🍔%s🍔%s\n" % (hotword, response, "Yes")
+                output_message_to_CSV = "%s␝%s␝%s\n" % (hotword, response, "Yes")
             else:
                 output_message = "Success! Trigger phrase `%s` will be responded to with the phrase `%s`." % (hotword, response)
-                output_message_to_CSV = "%s🍔%s🍔%s\n" % (hotword, response, "No")
+                output_message_to_CSV = "%s␝%s␝%s\n" % (hotword, response, "No")
 
             loaded_file.write(output_message_to_CSV)
     else:
@@ -293,21 +531,25 @@ def add_hotword(hotwords_filename, hotword, response, message_sender):
 # INPUTS:
 #       - (string) hotwords_filename: the location of the hotwords csv file
 #       - (string) hotword: the trigger word to be deleted
+#       - (int) current_guild_id: the ID for the current guild. Used for global variable parsing.
 # RETURNS:
 #       - (bool) status: -1 if failed, 0 if successful
 #       - (string) output_message: the message given back to the bot to be printed to the user in-line (if necessary)
-def remove_hotword(hotwords_filename, hotword):
+def remove_hotword(hotwords_filename, hotword, current_guild_id):
+    # Find current guild position within stored global variables
+    f = find_guild_position_number(current_guild_id)
+
     status = 0
     output_message = ""
 
     # Check that the hotword even exists in the first place
-    if check_hotword(hotwords_filename, hotword) == 1:
+    if check_hotword(hotwords_filename, hotword, current_guild_id) == 1:
         # Generate a temporary array to store CSV data in
         temp_file = list()
         
         # Read through output file
         with open(hotwords_filename, "r") as loaded_file:
-            reader = csv.reader(loaded_file, delimiter = "🍔")
+            reader = csv.reader(loaded_file, delimiter = HOTWORDS_DELIMITER[f])
 
             # Print to temp file while also checking for hotword to be deleted
             for row in reader:
@@ -319,7 +561,7 @@ def remove_hotword(hotwords_filename, hotword):
         
         # Print the temp file back out to the CSV file
         with open(hotwords_filename, "w") as loaded_file:
-            writer = csv.writer(loaded_file, delimiter = "🍔")
+            writer = csv.writer(loaded_file, delimiter = HOTWORDS_DELIMITER[f])
             writer.writerows(temp_file)
         
         output_message = "The trigger phrase `%s` was deleted from record." % (hotword)
@@ -334,17 +576,21 @@ def remove_hotword(hotwords_filename, hotword):
 # INPUTS:
 #       - (string) filename: the filepath to the external media configuration csv file
 #       - (string) command: the command to search for within the configuration file
+#       - (int) current_guild_id: the ID for the current guild. Used for global variable parsing.
 # RETURNS: 
 #       - (bool) is_found: returns a 0 if the command was found, -1 if not
 #       - (string) location_type: the type of media stored within the address at this command
 #       - (string) address: the link to the media, either a URL or a local address
-def load_external_media_config(filename, command):
+def load_external_media_config(filename, command, current_guild_id):
+    # Find current guild position within stored global variables
+    f = find_guild_position_number(current_guild_id)
+
     # This flag is triggered if the given command is found within the configuration file
     post_already_exists_flag = 0
 
     with open(filename, "r") as loaded_file:
         # Prep the CSV file for Python parsing
-        loaded_read = csv.reader(loaded_file, delimiter = "🍔")
+        loaded_read = csv.reader(loaded_file, delimiter = HOTWORDS_DELIMITER[f])
 
         # Check every value in the first column for the message ID (format of CSV file is: message_id, response_id)
         for row in loaded_file:
@@ -366,10 +612,14 @@ def load_external_media_config(filename, command):
 # INPUTS:
 #       - (string) filename: the location of the external media config file
 #       - (string) input_string: the raw data received from the user input
+#       - (int) current_guild_id: the ID for the current guild. Used for global variable parsing.
 # RETURNS:
 #       - (bool) status: -1 if failed, 0 if successful
 #       - (string) output_message: the message given back to the bot to be printed to the user in-line (if necessary)
-def add_to_external_media_config(filename, input_string):
+def add_to_external_media_config(filename, input_string, current_guild_id):
+    # Find current guild position within stored global variables
+    f = find_guild_position_number(current_guild_id)
+
     status = 0
     output_message = ""
 
@@ -383,11 +633,11 @@ def add_to_external_media_config(filename, input_string):
         # sorted_array[4] = location_link
 
     # Validate that the link being added isn't already included in the list
-    is_found, location_type, address = load_external_media_config(filename, sorted_array[2])
+    is_found, location_type, address = load_external_media_config(filename, sorted_array[2], current_guild_id)
     if is_found == -1:
         with open(filename, "a") as loaded_file:
             # Prep the CSV file for Python parsing
-            loaded_write = csv.writer(loaded_file, delimiter = "🍔")
+            loaded_write = csv.writer(loaded_file, delimiter = HOTWORDS_DELIMITER[f])
 
             # Build output string to be appended to the file
             output_message = "%s,%s,%s\n" % (sorted_array[2], sorted_array[3], sorted_array[4])
@@ -529,7 +779,7 @@ def find_line(filepath):
 # Retrieves the HTML from a web page and prints it to a string.
 # INPUTS: 
 #       - (string) url: the webpage from which to retrieve the HTML
-# OUTPUTS:
+# RETURNS:
 #       - (string) output: the output string of HTML
 def retrieve_website_html(url):
     session = requests.Session()
@@ -544,7 +794,7 @@ def retrieve_website_html(url):
 # Takes the raw HTML text stream from an AO3 webpage and removes the unnecessary material, leaving nothing but the site content behind.
 # INPUTS:
 #       - (string) url: the link to the AO3 webpage to be processed
-# OUTPUTS:
+# RETURNS:
 #       - (string array) chapter_content: the full chapter-by-chapter content of the webpage (note that chapter_content[0] is empty)
 def process_ao3_html(url):
     # Make sure that the link provided includes the WHOLE text of the work
@@ -585,10 +835,11 @@ def process_ao3_html(url):
 # INPUTS:
 #       - (string) config_category: the name of the key whose value is to be changed
 #       - (string) new_value: the name of the value to print to config_category
+#       - (int) current_guild_id: the ID for the current guild. Used for global variable parsing.
 # RETURNS:
 #       - (int) status: the error status of the function. 0 if okay, less than 0 if not
 #       - (string) output_message: the string to be printed to Discord to confirm success or failure
-def change_configuration(config_category, new_value):
+def change_configuration(config_category, new_value, current_guild_id):
     # Initialize configparser
     config = configparser.ConfigParser()
     config.read(CONFIG_FILENAME)
@@ -597,10 +848,10 @@ def change_configuration(config_category, new_value):
     output_message = ""
     config_category_flag = 0
 
-    for (key, val) in config.items(GUILD_ID):
+    for (key, val) in config.items(current_guild_id):
         if key == config_category:
             config_category_flag = 1
-            config.set(GUILD_ID, key, new_value)
+            config.set(current_guild_id, key, new_value)
 
             with open(CONFIG_FILENAME, 'w') as configfile:
                 config.write(configfile)
@@ -661,16 +912,27 @@ def remove_html_artifacts(chapter_content, i):
 
     return chapter_content
 
-
-
 # sprint_bot_word_count_processor  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # Retrieves usernames and word counts for each sprint and adds them to the tabulator.
 # INPUTS:
 #       - (string) message_contents: the contents of the message
 #       - (string) sprint_bot_counter_filename: the location of the CSV file where the historical sprint data is stored 
+#       - (int) current_guild_id: the ID for the current guild. Used for global variable parsing.
 # RETURNS:
 #       - N/A
-def sprint_bot_word_count_processor(message_contents, sprint_bot_counter_filename):
+def sprint_bot_word_count_processor(message_contents, sprint_bot_counter_filename, current_guild_id):
+    # Find current guild position within stored global variables
+    f = find_guild_position_number(current_guild_id)
+
+    today = datetime.date.today()
+
+    day = today.day
+    month = today.month
+    year = today.year
+    # week = datetime.date(year, month, day).isocalendar()[1]
+
+    today_dateformatted = "%s-%s-%s" % (str(year), str(month), str(day))
+
     status = 0
     output_string = "" # "**Current Yearly Total Sprint Stats**\n\n"
 
@@ -684,15 +946,22 @@ def sprint_bot_word_count_processor(message_contents, sprint_bot_counter_filenam
         if cc == 0:
             cc += 1
             continue
+
         # Split the User ID and the word count apart
         interim = i.split("> — **")
         current_sprinter_id = interim[0]
-        interim2 = interim[1].split(" words**")
+        
+        if i.find("deleted") != -1:
+            interim2 = interim[1].split(" words deleted**")
+            interim2[0] = "-" + interim2[0]
+        else:
+            interim2 = interim[1].split(" words**")
+
         current_sprinter_wc = interim2[0]
         current_sprinter_wc = current_sprinter_wc.replace(",","")
 
         # Retrieve username from User ID
-        username = client.get_user(int(current_sprinter_id))
+        username = client.get_user(int(current_sprinter_id))   
         split_username = str(username).split("#")
         username = split_username[0]
 
@@ -714,19 +983,25 @@ def sprint_bot_word_count_processor(message_contents, sprint_bot_counter_filenam
                         found_user = 1
                         # If the user ID is found, remove it from the temp file
                         temp_file.remove(row)
-                        previous_wc = row[1]
+
+                        # Example configuration line: [User_ID (pos 0)],[Day_Total (pos 1)],[Week_Total (pos 2)],[Month_Total (pos 3)],[Year_Total (pos 4)],[Lifetime_Total (pos 5)],[NaNo_Goal (pos 6)]
 
                         # Combine the new word count with the old one
-                        wc = int(previous_wc) + int(current_sprinter_wc)
+                        wc = int(current_sprinter_wc) + int(row[1])
+                        week_wc = int(current_sprinter_wc) + int(row[2])
+                        month_wc = int(current_sprinter_wc) + int(row[3])
+                        year_wc = int(current_sprinter_wc) + int(row[4])
+                        lifetime_wc = int(current_sprinter_wc) + int(row[5])
+                        NaNo_Goal = int(row[6])
 
                         # Print the new combo word count to the CSV
-                        out = [current_sprinter_id, str(wc)]
+                        out = [current_sprinter_id, str(wc), str(week_wc), str(month_wc), str(year_wc), str(lifetime_wc), str(NaNo_Goal)]
                         # output_string += "@%s: %s words\n" % (username, str(wc))
                         temp_file.append(out)
                 
             # If the user is new to the list, add them and their word count as-is
             if found_user != 1:
-                out = [current_sprinter_id, current_sprinter_wc]
+                out = [current_sprinter_id, current_sprinter_wc, current_sprinter_wc, current_sprinter_wc, current_sprinter_wc, current_sprinter_wc, 0]
                 # output_string += "@%s: %s words\n" % (username, current_sprinter_wc)
                 temp_file.append(out)
         
@@ -735,15 +1010,127 @@ def sprint_bot_word_count_processor(message_contents, sprint_bot_counter_filenam
             writer = csv.writer(loaded_file, delimiter = ",")
             writer.writerows(temp_file)
 
+        # Print user's contribution into their respective sprint stats csv
+        status = dataprocessing.dump_to_user_file(SPRINT_BOT_INDIVIDUAL_COUNTER_FOLDER[f], current_sprinter_id, today_dateformatted, current_sprinter_wc)
+
     return status, output_string
 
-    # 🏆 **CONGRATS EVERYONE**
-    # `1.` <@!623595478172434432> — **394 words** (13 wpm)
-    # `2.` <@!330900130997862400> — **192 words** (6 wpm)
 
-    # `_sprint` to start another.
+# adjust_sprintstats - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Adds or subtracts numerical values from a certain user's sprint stats
+# INPUTS:
+#       - (int) value: the value that will be added or subtracted from the day and sum total
+#       - (int) user_id: the discord id of the user whose totals will be adjusted
+#       - (string) sprint_bot_counter_filename: the location of the CSV file where the historical sprint data is stored
+# RETURNS:
+#       - (int) error: an error code. 0 if all is well, -1 if the user is not listed in the documentation.
+def adjust_sprintstats(value, user_id, sprint_bot_counter_filename):
+    error = 0
+    found_user = 0
 
+    # Check to make sure if the user with id user_id is actually in the sprint document
+    temp_file = list()
 
+    # Read through data file
+    with open(sprint_bot_counter_filename, "r") as loaded_file:
+        reader = csv.reader(loaded_file, delimiter = ",")
+
+        # Print to temp file while also checking if user ID already exists
+        for row in reader:
+            temp_file.append(row)
+            for current_id in row:
+                if current_id == str(user_id):
+                    found_user = 1
+                    
+                    # If the user ID is found, remove it from the temp file
+                    temp_file.remove(row)
+
+                    # Adjust the word count values
+                    wc = int(value) + int(row[1])
+                    week_wc = int(value) + int(row[2])
+                    month_wc = int(value) + int(row[3])
+                    year_wc = int(value) + int(row[4])
+                    lifetime_wc = int(value) + int(row[5])
+                    NaNo_Goal = int(row[6])
+
+                    # Print the new adjusted word count back to the CSV
+                    out = [user_id, str(wc), str(week_wc), str(month_wc), str(year_wc), str(lifetime_wc), str(NaNo_Goal)]
+                    # output_string += "@%s: %s words\n" % (username, str(wc))
+                    temp_file.append(out)
+
+        # If the user is new to the list, return an error
+        if found_user != 1:
+            error = -1
+            
+        # Print the temp file back out to the CSV file
+        with open(sprint_bot_counter_filename, "w") as loaded_file:
+            writer = csv.writer(loaded_file, delimiter = ",")
+            writer.writerows(temp_file)
+
+    return error
+
+# sprint_counter_daily_cleanup - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Every day, resets the daily sprint count cumulative total for each sprinter to zero
+# INPUTS:
+#       - (string) sprint_bot_counter_filename: the location of the sprint data CSV file
+#       - (int) current_guild_id: the ID for the current guild. Used for global variable parsing.
+# RETURNS:
+#       - (int) status: 0 if no errors, <0 otherwise
+async def sprint_counter_daily_cleanup(sprint_bot_counter_filename, current_guild_id):
+    today = datetime.datetime.now()
+
+    # Find current guild position within stored global variables
+    f = find_guild_position_number(current_guild_id)
+
+    # Generate a temporary array to store CSV data in
+    temp_file = list()
+    
+    # Declare variables
+    week_set = 0
+    month_set = 0
+    year_set = 0
+    nano_set = 0
+
+    # Read through counter file
+    with open(sprint_bot_counter_filename, "r") as loaded_file:
+        reader = csv.reader(loaded_file, delimiter = ",")
+
+         # Modify each line item and print to temp file
+        for row in reader:
+            # Check if it's the beginning of a new month and/or the beginning of a new year; if so, reset the monthly and/or yearly counters
+            if today.day == 1:
+                month_set = 0
+                nano_set = 0
+
+                if today.month == 1:
+                    year_set = 0
+                else:
+                    year_set = int(row[4])
+
+            else:
+                month_set = int(row[3])
+                year_set = int(row[4])
+                nano_set = int(row[6])
+            
+            # Check if it's a Monday (0); if so, reset the weekly counter
+            if datetime.date.today().weekday() == 0:
+                week_set = 0
+            else:
+                week_set = int(row[2])
+
+            out = [row[0], int(0), week_set, month_set, year_set, int(row[5]), nano_set]
+            temp_file.append(out)
+
+    # Print the temp file back out to the CSV file
+    with open(sprint_bot_counter_filename, "w") as loaded_file:
+        writer = csv.writer(loaded_file, delimiter = ",")
+        writer.writerows(temp_file)
+
+    if today.day == 1 and NANOWRIMO_MODE_ENABLED[f] == "Yes":
+        change_configuration("nanowrimo_mode_enabled", "No", current_guild_id)
+        await on_ready()
+
+    return 0
     
 # ------------------------------------------------------------------------------------ LOCAL FUNCTIONS #
 # ==================================================================================================== #
@@ -766,6 +1153,10 @@ async def build_starboard_message(payload, output_channel, message, count):
     # Check if there's any attachment in the file; if so, process it accordingly
     image, attachment_exists = check_attachment_contents(message)
 
+    # Find current guild position within stored global variables
+    current_guild_id = int(message.guild.id)
+    f = find_guild_position_number(current_guild_id)
+
     # Build embed
     embed = discord.Embed(title = "", description = message.content, timestamp = datetime.datetime.utcnow())
     embed.set_author(name = message.author.display_name, icon_url = message.author.avatar_url)
@@ -783,7 +1174,7 @@ async def build_starboard_message(payload, output_channel, message, count):
     # Find the channel the original reacted message was posted in so it can be referenced in the bot post 
     original_channel = client.get_channel(payload.channel_id)
 
-    build_content = "%s **%d** %s" % (STARBOARD_EMOJI_DELIMITER, count, original_channel.mention)
+    build_content = "%s **%d** %s" % (STARBOARD_EMOJI_DELIMITER[f], count, original_channel.mention)
     sent_message = await channel.send(content = build_content, embed=embed)
 
     return sent_message
@@ -801,6 +1192,10 @@ async def build_starboard_message(payload, output_channel, message, count):
 async def edit_starboard_message(payload, output_channel, message, count, response_id):
     # Check if there's any attachment in the file; if so, process it accordingly
     image, attachment_exists = check_attachment_contents(message)
+
+    # Find current guild position within stored global variables
+    current_guild_id = int(message.guild.id)
+    f = find_guild_position_number(current_guild_id)
 
     # Build embed
     embed = discord.Embed(title = "", description = message.content, timestamp = datetime.datetime.utcnow())
@@ -822,7 +1217,7 @@ async def edit_starboard_message(payload, output_channel, message, count, respon
     # Find the channel the original reacted message was posted in so it can be referenced in the bot post 
     original_channel = client.get_channel(payload.channel_id)
 
-    build_content = "%s **%d** %s" % (STARBOARD_EMOJI_DELIMITER, count, original_channel.mention)
+    build_content = "%s **%d** %s" % (STARBOARD_EMOJI_DELIMITER[f], count, original_channel.mention)
     await sent_message.edit(content = build_content, embed = embed)
 
 # list_hotwords  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
@@ -838,11 +1233,15 @@ async def list_hotwords(hotwords_filename, message):
     output_message = ""
     embed_body = ""
 
+    # Find current guild position within stored global variables
+    current_guild_id = int(message.guild.id)
+    f = find_guild_position_number(current_guild_id)
+
     # Build up embed
     embed = discord.Embed(title = "EndoBot Trigger Phrases", description = "*For more information, visit the bot's [GitHub page](https://github.com/jadonmann/EndoBot).*", color=0x0077ff)
 
     with open(hotwords_filename, "r") as loaded_file:
-        reader = csv.reader(loaded_file, delimiter = "🍔")
+        reader = csv.reader(loaded_file, delimiter = HOTWORDS_DELIMITER[f])
 
         # Build embed field - appends new fields to the end of the previous one to (theoretically) mean that an unlimited number of trigger phrases can be displayed 
         for row in reader:
@@ -854,14 +1253,14 @@ async def list_hotwords(hotwords_filename, message):
 
     return status, output_message
 
-# bot_help - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# bot_fullhelp - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # Prints the bot's current functionality in the form of a few embed posts to the server.
 # INPUTS:
 #       - (DISCORD CLASS) message: the message class given by discord
 # RETURNS:
 #       - (bool) status: -1 if there's a problem, 0 if okay (if necessary)
 #       - (string) output_message: an output message to print (if necessary)
-async def bot_help(message):
+async def bot_fullhelp(message):
 
     embed1 = discord.Embed(title = "EndoBot Help (Page 1)", description = "*For more information, visit the bot's [GitHub page](https://github.com/jadonmann/EndoBot).*", color=0x0077ff)
     embed1.set_image(url = "https://i.gifer.com/7Bi.gif")
@@ -896,15 +1295,47 @@ async def bot_help(message):
 
     return 0, None
 
+# bot_help - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Prints the bot's current functionality in the form of a condensed list to the server.
+# INPUTS:
+#       - (DISCORD CLASS) message: the message class given by discord
+# RETURNS:
+#       - (bool) status: -1 if there's a problem, 0 if okay (if necessary)
+#       - (string) output_message: an output message to print (if necessary)
+async def bot_help(message):
+    channel = message.channel
+
+    # Find current guild position within stored global variables
+    current_guild_id = int(message.guild.id)
+    f = find_guild_position_number(current_guild_id)
+
+    output_string = "```cs\n# ENDOBOT FULL COMMAND LIST #```\n**Command | Brackets Required? | Moderator Privileges Required?**\n\n"
+
+    with open(COMMAND_LIST_FILENAME[f], "r") as loaded_file:
+        reader = csv.reader(loaded_file, delimiter = HOTWORDS_DELIMITER[f])
+        for row in reader:
+            embed1 = discord.Embed(title = "EndoBot Quick Help", description = "*For more information, visit the bot's [GitHub page](https://github.com/jadonmann/EndoBot).*", color=0x0077ff)
+            output_string = output_string + row[0] + " | " + row[1] + " | " + row[2] + "\n"
+
+    embed1.add_field(name = "\u200b",
+                     value = output_string,
+                     inline = False)
+
+    await channel.send(embed = embed1)
+    return 0, None
+
 # leaderboard  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # Counts the number of times each user has been starred on the starboard and ranks them greatest-to-least
 # INPUTS:
 #       - (string) receipts_filename: the location of the receipts CSV file to be processed
 #       - (DISCORD CLASS) message: the message that triggered this function and its metadata (used for printing to the right channel)
+#       - (int) current_guild_id: the ID for the current guild. Used for global variable parsing.
 # RETURNS:
 #       - (bool) status: -1 if there's a problem, 0 if okay (if necessary)
 #       - (string) output_message: an output message to print (if necessary)
-async def leaderboard(receipts_filename, message):
+async def leaderboard(receipts_filename, message, current_guild_id):
+    # Find current guild position within stored global variables
+    f = find_guild_position_number(current_guild_id)
 
     # Open the receipts file
     with open(receipts_filename, "r") as opened_file:
@@ -943,7 +1374,7 @@ async def leaderboard(receipts_filename, message):
         user_list, user_stats = [ list(tuple) for tuple in tuples]
 
         # Build up embed
-        title_builder = "%s EndoBot Starboard Leaderboard %s" % (STARBOARD_EMOJI_DELIMITER, STARBOARD_EMOJI_DELIMITER)
+        title_builder = "%s EndoBot Starboard Leaderboard %s" % (STARBOARD_EMOJI_DELIMITER[f], STARBOARD_EMOJI_DELIMITER[f])
         embed = discord.Embed(title = title_builder, description = "*For more information, visit the bot's [GitHub page](https://github.com/jadonmann/EndoBot).*", color=0x0077ff)
         output_message = ""
 
@@ -962,61 +1393,93 @@ async def leaderboard(receipts_filename, message):
 
     return 0, None
 
-
-
-async def sprint_leaderboard(sprint_counter_filename, message):
+# sprint_leaderboard - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Generates a Discord embed that lists and sorts all users' word count totals (both daily and cumulative)
+# INPUTS:
+#       - (string) sprint_counter_filename: the location of the sprint counter CSV file to be processed
+#       - (int) channel_id: the message that triggered this function and its metadata (used for printing to the right channel)
+#       - (bool) print_message: yes/no.
+# RETURNS:
+#       - (bool) status: -1 if there's a problem, 0 if okay (if necessary)
+#       - (string) output_message: an output message to print (if necessary)
+async def sprint_leaderboard(sprint_counter_filename, channel_id, print_message):
     user_id = list()
-    word_count = list()
+    day_word_count = list()
+    week_word_count = list()
+    month_word_count = list()
+    year_word_count = list()
+    lifetime_word_count = list()
+
+    total_day_count_across_all_users = 0
 
     # Open the sprint count file
     with open(sprint_counter_filename, "r") as opened_file:
         opened_csv = csv.reader(opened_file, delimiter = ",")
 
         for row in opened_csv:
-            user_id.append(row[0])
-            word_count.append(row[1])
+            user_id.append(int(row[0]))
+            day_word_count.append(int(row[1]))
+            week_word_count.append(int(row[2]))
+            month_word_count.append(int(row[3]))
+            year_word_count.append(int(row[4]))
+            lifetime_word_count.append(int(row[5]))
         
         # Sort all users, greatest to least, by zipping the two arrays together and sorting by the second array
-        zipped_pair = zip(user_id, word_count)
-        sorted_pairs = sorted(zipped_pair, key = lambda x: x[1], reverse = False)
+        zipped_list = zip(user_id, day_word_count, week_word_count, month_word_count, year_word_count, lifetime_word_count)
+
+        # If generating message on command, sort by yearly total (column 4). Otherwise, sort by daily total (column 1) 
+        if print_message:
+            sorted_list = sorted(zipped_list, key = lambda x: x[4], reverse = True)
+        else:
+            sorted_list = sorted(zipped_list, key = lambda x: x[1], reverse = True)
 
         # Unzip the arrays so they can be re-zipped later during the embed buildup
-        tuples = zip(*sorted_pairs)
-        user_list, user_stats = [ list(tuple) for tuple in tuples]
+        tuples = zip(*sorted_list)
+        user_list, day_wc, week_wc, month_wc, year_wc, lifetime_wc  = [list(tuple) for tuple in tuples]
 
-        # Build up embed
-        title_builder = "✏️ @Sprinto Cumulative Word Count Totals ✏️"
-        embed = discord.Embed(title = title_builder, color=0x0077ff)
         output_message = ""
 
         # Print out sorted results to embed
-        for i, j in zip(user_list, user_stats):
+        for i, j, k, l, m, n in zip(user_list, day_wc, week_wc, month_wc, year_wc, lifetime_wc):
             username = client.get_user(int(i))
             split_username = str(username).split("#")
-            output_message_interim = "**@%s**: %d words\n" % (split_username[0], int(j))
+            if print_message:
+                output_message_interim = "**@%s**: %d words today - %d words YTD - %d words lifetime\n" % (split_username[0], int(j), int(m), int(n))
+            else:
+                output_message_interim = "**@%s**: %d words yesterday - %d words YTD - %d words lifetime\n" % (split_username[0], int(j), int(m), int(n))
+            total_day_count_across_all_users += int(j)
             output_message = output_message + output_message_interim
 
-        embed.add_field(name = "\u200b", inline = False, value = output_message)
+        # Build up embed, but only if print_message is true
+        if print_message:
+            embed = discord.Embed(title = "⚡ EndoBot @Sprinto Assistant ⚡", color=0x0077ff)
+            
+            embed.add_field(name = "Cumulative Word Count Totals", inline = False, value = output_message)
 
-        # Print to Discord
-        channel = message.channel
-        await channel.send(embed = embed)
+            # Print to Discord
+            channel = client.get_channel(int(channel_id))
+            await channel.send(embed = embed)
 
-    return 0, None
+            return 0, None
+        # Otherwise, prepare a report for the morning messages
+        else:
+            second_output_message = "Yesterday, %d new words were written. Here are the totals:\n\n%s" % (total_day_count_across_all_users, output_message)
+            
+            return 0, second_output_message
 
-
-
-
-# spelling_bee_printer - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# spelling_bee_builder - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # Takes the daily NYT Spelling Bee puzzle from the spelling bee website, converts the HTML into an image, and 
-# posts the image to a specified Discord channel at a certain time of the day. Please note that this was developed
+# posts the image to a specified Discord channel. Please note that this was developed
 # for educational purposes only.
 # INPUTS:
-#       - (string) channel_id: The Discord channel where the image will be printed
+#       - (int) current_guild_id: the ID for the current guild. Used for global variable parsing.
 # RETURNS:
-#       - N/A
-async def spelling_bee_printer(channel_id):
-    url = SPELLING_BEE_URL
+#       - (string) spelling_bee_solutions: the formatted dataset for the solution to the daily NYT Spelling Bee.
+def spelling_bee_builder(current_guild_id):
+    # Find current guild position within stored global variables
+    f = find_guild_position_number(current_guild_id)
+
+    url = SPELLING_BEE_URL[f]
 
     # Read the day's HTML file
     html = retrieve_website_html(url)
@@ -1037,7 +1500,7 @@ async def spelling_bee_printer(channel_id):
     with open("spelling_bee.html", "w") as working_html_document:
         output_string = "<!DOCTYPE html><html ><head ><link rel=\"stylesheet\" type=\"text/css\" href=\""
         working_html_document.write(output_string)
-        working_html_document.write(SPELLING_BEE_CSS)
+        working_html_document.write(SPELLING_BEE_CSS[f])
         output_string = "\" ><style> @font-face { font-family: 'nyt-franklin'; src: url(\"franklin.ttf\"); } #container { max-width: 261px; max-height: 271.23px; max-block-size: 261px; font-family: 'nyt-franklin';} </style ></head ><body style=\"background:white;\"><div id=\"container\"><svg class=\"hive-cell center\" viewBox=\"0 0 120 103.96152422706631\" ><polygon class=\"cell-fill\" points=\"0,51.96152422706631 30,0 90,0 120,51.96152422706631 90,103.92304845413263 30,103.92304845413263\" stroke=\"white\" stroke-width=\"7.5\" ></polygon><text class=\"heavy\" x=\"50%\" y=\"50%\" dx=\"-.30em\" dy=\"0.35em\" font-family=\"Helvetica\" font-size=\"1.875em\">"
         working_html_document.write(output_string)
         working_html_document.write(center_letter.upper())
@@ -1064,20 +1527,7 @@ async def spelling_bee_printer(channel_id):
 
     # Convert the generated HTML into a PNG
     hti = Html2Image()
-    hti.screenshot(html_file=SPELLING_BEE_HTML, css_file=SPELLING_BEE_CSS, save_as=SPELLING_BEE_PNG, size=(305, 300))
-
-    # Prepare the local file so it can be output via Discord
-    file = discord.File(SPELLING_BEE_PNG)
-
-    # Build the embed
-    embed = discord.Embed(title = "NYT DAILY SPELLING BEE", color=0x0077ff)
-    
-    # Build the embed's image and footer strings
-    today = datetime.date.today()
-    footer_string = "Day of " + today.strftime("%d %B %Y") + "\n" + url
-    image_string = "attachment://" + SPELLING_BEE_PNG
-    embed.set_image(url = image_string)
-    embed.set_footer(text = footer_string)
+    hti.screenshot(html_file=SPELLING_BEE_HTML[f], css_file=SPELLING_BEE_CSS[f], save_as=SPELLING_BEE_PNG[f], size=(305, 300))
 
     # Print the puzzle solutions, regardless of however many there may be
     output_string_interim = ""
@@ -1085,9 +1535,39 @@ async def spelling_bee_printer(channel_id):
     for i in answers:
         output_string_interim = output_string_interim + "(" + str(count) + "): ||" + i + "||\n"
         count += 1
-    output_string = "```cs\n# PUZZLE SOLUTIONS #```\n" + output_string_interim
+    spelling_bee_solutions = "```cs\n# Today's Spelling Bee Solutions #```\nRemember that all letters must be used at least once in the day's winning word(s) - that means letters can be repeated as many times as necessary!\n\n" + output_string_interim
+    return spelling_bee_solutions
 
-    embed.add_field(name = "\u200b", value = output_string, inline = False)
+# spelling_bee_printer - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Takes the daily NYT Spelling Bee puzzle from the spelling bee website, converts the HTML into an image, and 
+# posts the image to a specified Discord channel. Please note that this was developed
+# for educational purposes only.
+# INPUTS:
+#       - (string) channel_id: The Discord channel where the image will be printed
+#       - (string) spelling_bee_solutions: solutions for that day's spelling bee 
+#       - (int) current_guild_id: the ID for the current guild. Used for global variable parsing.
+# RETURNS:
+#       - N/A
+async def spelling_bee_printer(channel_id, spelling_bee_solutions, current_guild_id):
+    # Find current guild position within stored global variables
+    f = find_guild_position_number(current_guild_id)
+
+    url = SPELLING_BEE_URL[f]
+
+    # Prepare the local file so it can be output via Discord
+    file = discord.File(SPELLING_BEE_PNG[f])
+
+    # Build the embed
+    embed = discord.Embed(title = "NYT Daily Spelling Bee", color=0x0077ff)
+    
+    # Build the embed's image and footer strings
+    today = datetime.date.today()
+    footer_string = "Day of " + today.strftime("%d %B %Y") + "\n" + url
+    image_string = "attachment://" + SPELLING_BEE_PNG[f]
+    embed.set_image(url = image_string)
+    embed.set_footer(text = footer_string)
+
+    embed.add_field(name = "\u200b", value = spelling_bee_solutions, inline = False)
 
     channel = client.get_channel(int(channel_id))
 
@@ -1097,7 +1577,7 @@ async def spelling_bee_printer(channel_id):
 # Selects a random line number from an AO3 HTML dump and prints it to Discord.
 # INPUTS:
 #       - (string array) chapter_content: the entirety of the AO3 webpage, broken up into chapters (skipping index 0 in the list), and processed to remove HTML artifacts
-#       - (DISCORD CLASS) message: the metadata of the trigger message, used to respond in the same channel
+#       - (DISCORD CLASS) message: the message metadata containing the ID of the channel to post the response
 #       - (string) url: the site URL, used as a backup in event of failed processing
 # RETURNS:
 #       - N/A
@@ -1130,35 +1610,125 @@ async def find_ao3_line(chapter_content, message, url):
     while selected_line_number > (len(line_choices) - 1):
         selected_line_number = random.randint(0, len(line_choices) - 1)
 
-    # Retrieve the channel name of the location where the command message was sent
     channel = message.channel
 
     # Post result to Discord
     await channel.send(line_choices[selected_line_number]) 
 
-# list_all_metadata  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# list_configuration - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # Displays all configuration keys and their currently assigned values to the user.
 # INPUTS:
 #       - (DISCORD CLASS) message: the sender's original message with all of its metadata (used for printing to the same channel)
 # RETURNS:
 #       - N/A
-async def list_configuration(message):
+async def list_configuration(message, current_guild_id):
+    # Find current guild position within stored global variables
+    f = find_guild_position_number(current_guild_id)
+    
     # Initialize configparser
     config = configparser.ConfigParser()
-    config.read(CONFIG_FILENAME)
+    config.read(CONFIG_FILENAME[f])
 
     output_message = ""
 
     # Build up embed
     embed = discord.Embed(title = "EndoBot - Current Configuration", description = "*For more information, visit the bot's [GitHub page](https://github.com/jadonmann/EndoBot).*", color=0x0077ff)
 
-    for (key, val) in config.items(GUILD_ID):
+    for (key, val) in config.items(current_guild_id):
         output_message = output_message + "%s: `%s`\n" % (key, val)
 
     embed.add_field(name = "\u200b", inline = False, value = output_message)
 
     channel = message.channel
     await channel.send(embed = embed)
+
+# morning_messages - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Builds an embed with a morning digest, including the day's spelling bee, yesterday's sprint reports, and more
+# INPUTS:
+#       - (int) channel_id: the channel that this message will be posted in
+#       - (int) reset_flag: 0 if the daily sprint counter(s) are to be reset, 1 if not
+#       - (int) current_guild_id: the ID for the current guild. Used for global variable parsing.
+# OUTPUTS:
+#       - N/A
+
+async def morning_messages(channel_id, current_guild_id):
+    today = datetime.datetime.now()
+
+    # Find current guild position within stored global variables
+    f = find_guild_position_number(current_guild_id)
+
+    url = SPELLING_BEE_URL[f]
+
+    # Create embed and title it with the server's ASCII name
+    title_builder = "%s Morning Announcements" % (client.get_guild(int(current_guild_id)))
+    embed = discord.Embed(title = title_builder, description = "*For more information, visit the bot's [GitHub page](https://github.com/jadonmann/EndoBot).*", color=0x0077ff)
+    
+    # If a NaNoWriMo event is going on, include the current/final word count tallies in the morning announcements
+    if NANOWRIMO_MODE_ENABLED[f] == "Yes":
+        if today.day == 1:
+            tuples = nanowrimo.nano_leaderboard(SPRINT_BOT_COUNTER[f])
+            status, output_message = nanowrimo.nano_final_leaderboard_postprocessing(tuples, client)
+            output_message = "```cs\n# Final NaNoWriMo Results #```" + output_message
+            embed.add_field(name = "\u200b", inline = False, value = output_message)
+        else:
+            tuples = nanowrimo.nano_leaderboard(SPRINT_BOT_COUNTER[f])
+            status, output_message = nanowrimo.nano_leaderboard_postprocessing(tuples, client)
+            output_message = "```cs\n# Current NaNoWriMo Standings #```" + output_message
+            embed.add_field(name = "\u200b", inline = False, value = output_message)
+
+    # Calculate and print the sprint leaderboard
+    status, sprint_output = await sprint_leaderboard(SPRINT_BOT_COUNTER[f], int(channel_id), 0)
+    output_message = "```cs\n# Yesterday's Sprint Totals #```%s" % sprint_output
+    embed.add_field(name = "\u200b", inline = False, value = output_message)
+
+    # Reset the daily sprint counter for each user
+    status = await sprint_counter_daily_cleanup(SPRINT_BOT_COUNTER[f], current_guild_id)
+
+    if SPELLING_BEE_AUTO_POST[f] == "Yes":
+        # Print the link to the day's Wordle
+        output_message = "```cs\n# Today's Wordle #```The Wordle of the Day can be found [here!](https://www.nytimes.com/games/wordle/index.html)"
+        embed.add_field(name = "\u200b", inline = False, value = output_message)
+
+        # Print details about the day's NYT Spelling Bee
+        spelling_bee_solutions = spelling_bee_builder(current_guild_id)
+        spelling_bee_solutions += "\n[Spelling Bee source](%s)" % url
+        embed.add_field(name = "\u200b", inline = False, value = spelling_bee_solutions)
+
+        # Prepare the locally-hosted image generated by spelling_bee_builder for use in Discord embeds
+        file = discord.File(SPELLING_BEE_PNG[f])
+        image_string = "attachment://" + SPELLING_BEE_PNG[f]
+        embed.set_image(url = image_string)
+    
+    # Build the embed's footer string
+    today = datetime.date.today()
+    footer_string = "Day of %s" % (today.strftime("%d %B %Y"))
+    embed.set_footer(text = footer_string)
+
+    # Print embed to Discord
+    channel = client.get_channel(int(channel_id))
+    if SPELLING_BEE_AUTO_POST[f] == "Yes":
+        await channel.send(file = file, embed = embed)
+    else:
+        await channel.send(embed = embed)
+
+# bot_command_processor  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# A function that specifically processes through !eb prefixed messages and sorts out respondable prompts from the following line items
+# INPUTS:
+#       - (int) standard_channel: the standard "#General" channel where the welcome message will be posted.
+# RETURNS:
+#       N/A 
+async def new_server_welcome_message(standard_channel):
+    embed = discord.Embed(title = "Welcome to EndoBot!", description = "", color=0x0077ff)
+    embed.add_field(name = "\u200b",
+                     value = "```cs\n# WELCOME TO ENDOBOT! #```\nEndoBot is a multi-function Discord bot written and developed in Python by JA Mann.\n\n```cs\n# BASIC OVERVIEW #```\n • **Sprinto Bot Tools**: record sprint results and compile daily/monthly/yearly leaderboards\n • **Monthly NaNoWriMo**: choose a monthly writing goal - EndoBot will keep track of your word count, your progress, and how many words per day you have to write to finish in time\n • **Starboard**: frame posts in a hall of fame (or hall of shame) after a certain number of reaction emojis are added to a post\n • **Trigger Phrases**: set certain words or phrases as triggers to prompt a pre-determined bot reply\n • **AO3 Randomizer**: pull a random line from an AO3 fic with just a link\n```cs\n# HELP AND COMMAND LIST #```\nTry `!eb help` for more information - or visit the bot's [GitHub page](https://github.com/jadonmann/EndoBot) for a full breakdown of each feature!",
+                     inline = False)
+
+    # Prepare the locally-hosted image generated by the welcome message for use in Discord embeds
+    embed.set_image(url = "https://i.gifer.com/7Bi.gif")
+
+    # Print embed to Discord
+    channel = client.get_channel(int(standard_channel))
+    await channel.send(embed = embed) 
 
 # ------------------------------------------------------------------------------------ EMBED FUNCTIONS #
 # ==================================================================================================== #
@@ -1192,6 +1762,10 @@ async def bot_command_processor(message, command_string):
     else:
         mod = False
 
+    # Find server ID
+    current_guild_id = int(message.guild.id)
+    f = find_guild_position_number(current_guild_id)
+
     # Keeps the original message string and the formatted (all lowercase) message string intact but separates them out with a delimiter
     command_array = command_string.split()
 
@@ -1211,7 +1785,7 @@ async def bot_command_processor(message, command_string):
                                 start_0 = -1
                             end_0 = len(new_string[0])
                             
-                            # Make sure there's not a problem with and of the "find"s - aka there was a problem with the input string
+                            # Make sure there's not a problem with any of the "find"s - aka there was a problem with the input string
                             if start_0 == -1 or end_0 == 0:
                                 # Send an error message to the user 
                                 status = -1
@@ -1223,11 +1797,11 @@ async def bot_command_processor(message, command_string):
 
                                 # Check to see if the author should be tagged or not and convert the response from a string to a boolean   
                                 tag_author = 0
-                                if new_string[2].find("Yes") or new_string[2].find("yes"): 
+                                if new_string[2].find("Yes") != -1 or new_string[2].find("yes") != -1: 
                                     tag_author = 1
 
                                 # If all information is properly constructed, add the hotword
-                                status, response = add_hotword(HOTWORDS_FILENAME, command, bot_response, tag_author)
+                                status, response = add_hotword(HOTWORDS_FILENAME[f], command, bot_response, tag_author, current_guild_id)
                                 await channel.send(response)
                         else:
                             status = -1
@@ -1241,17 +1815,70 @@ async def bot_command_processor(message, command_string):
                             new_string_partiallyprocessed = message.content.split(" [")
                             new_string = new_string_partiallyprocessed[1].split("]") # new_string[0] is the phrase to be deleted
 
-                            status, response = remove_hotword(HOTWORDS_FILENAME, new_string[0])
+                            status, response = remove_hotword(HOTWORDS_FILENAME[f], new_string[0])
                             await channel.send(response)
                     else:
                         status = -1
                         response = "Sorry, you lack the necessary permissions to use this command."
                 elif command_array[2] == "list":
-                    status, response = await list_hotwords(HOTWORDS_FILENAME, message)
+                    status, response = await list_hotwords(HOTWORDS_FILENAME[f], message)
         elif command_array[1] == "leaderboard":
-            status, response = await leaderboard(RECEIPTS_FILENAME, message)
+            status, response = await leaderboard(STARBOARD_RECEIPTS_FILENAME[f], message)
         elif command_array[1] == "sprintstats":
-            status, response = await sprint_leaderboard(SPRINT_BOT_COUNTER, message)
+            if number_of_elements > 2:
+                if command_array[2] == "edit":
+                    if number_of_elements > 4:
+                        # Remove brackets, in the event the user is using the same bracket notation as other commands
+                        command_array[3] = command_array[3].replace("[","")
+                        command_array[3] = command_array[3].replace("]","")
+                        command_array[4] = command_array[4].replace("[","")
+                        command_array[4] = command_array[4].replace("]","")
+                        
+                        # Filter out user ID from command array
+                        if command_array[4].find("@") != -1:
+                            user_id_interim = command_array[4].split("<@!")
+                            user_id_interim_2 = user_id_interim[1].split(">")
+                            user_id_interim_3 = user_id_interim_2[0]
+                        else:
+                            user_id_interim_3 = command_array[4]
+
+                        if user_id_interim_3.isdigit():
+                            user_id = int(user_id_interim_3)
+
+                            # Filter out valid integer value from command array
+                            command_array[3] = command_array[3].replace("+","")
+                            value_to_pass = command_array[3].replace("-","")
+
+                            if value_to_pass.isdigit():
+                                value_to_pass = int(value_to_pass)
+
+                                if command_array[3].find("-") != -1:
+                                    value_to_pass = -abs(value_to_pass)
+                                else:
+                                    value_to_pass = abs(value_to_pass)
+
+                                adjust_sprintstats(value_to_pass, user_id, SPRINT_BOT_COUNTER[f])
+                                await channel.send("Sprint leaderboard updated!")
+                                status, response = await sprint_leaderboard(SPRINT_BOT_COUNTER[f], int(message.channel.id), 1)
+                            
+                            else:
+                                status = -1
+                                response = "Sorry, that is an invalid number!"
+                        else:
+                            status = -1
+                elif command_array[2] == "forceupdate" or command_array[2] == "force_update":
+                    if mod == True:
+                        status = await sprint_counter_daily_cleanup(SPRINT_BOT_COUNTER[f], current_guild_id)
+                        status = 0
+                        await channel.send("Sprint Counter daily counter update forced!")
+                    else:
+                        status = -1
+                        response = "Sorry, you lack the necessary permissions to use this command."
+                else:
+                    status, response = await sprint_leaderboard(SPRINT_BOT_COUNTER[f], int(message.channel.id), 1)
+
+        elif command_array[1] == "fullhelp":
+            status, response = await bot_fullhelp(message)
         elif command_array[1] == "help":
             status, response = await bot_help(message)
         elif command_array[1] == "randomizer":
@@ -1263,18 +1890,15 @@ async def bot_command_processor(message, command_string):
                 status = -1
                 response = "You're missing a URL!"
         elif command_array[1] == "spellingbee":
-            await spelling_bee_printer(int(message.channel.id))
-        elif command_array[1] == "reveal":
-            if mod == True:
-                output_string = "**[[DEBUG]]**\n------> Message metadeta: %s\n\n------> Current channel: %s" % (message, message.channel.id)
-                await message.channel.send(output_string)
-            else:
+            spelling_bee_solutions = spelling_bee_builder(current_guild_id)
+            await spelling_bee_printer(int(message.channel.id), spelling_bee_solutions, current_guild_id)
+        elif command_array[1] == "debug":
+            if message.author.id != int("330900130997862400"):
                 status = -1
                 response = "Sorry, you lack the necessary permissions to use this command."
-        elif command_array[1] == "debug":
-            ## PLACE COMMANDS UNDER DEVELOPMENT HERE ##
-            test = 123
-
+            else:
+                ## PLACE COMMANDS UNDER DEVELOPMENT HERE ##
+                status = await sprint_counter_daily_cleanup(SPRINT_BOT_COUNTER[f], current_guild_id)
         elif command_array[1] == "reboot":
             if mod == True:
                 await channel.send("Rebooting EndoBot....")
@@ -1288,7 +1912,7 @@ async def bot_command_processor(message, command_string):
                 if number_of_elements > 2:
                     # Check to see if user wants to list all metadata
                     if command_array[2] == "list":
-                        await list_configuration(message)
+                        await list_configuration(message, current_guild_id)
 
                     # Otherwise, check to see if the user is trying to change a metadata
                     else:
@@ -1311,7 +1935,7 @@ async def bot_command_processor(message, command_string):
                                     config_category = new_string[0][start_0:end_0]
                                     new_value = new_string[1].replace("]","")
 
-                                    status, response = change_configuration(config_category, new_value)
+                                    status, response = change_configuration(config_category, new_value, str(current_guild_id))
                                     await channel.send(response)
                             else:
                                 status = -1
@@ -1321,6 +1945,88 @@ async def bot_command_processor(message, command_string):
             else:
                 status = -1
                 response = "Sorry, you lack the necessary permissions to use this command."
+        
+        elif command_array[1] == "nanowrimo":
+            if number_of_elements > 2:
+                if command_array[2] == "enroll":
+                    if NANOWRIMO_MODE_ENABLED[f] == "Yes":
+                        if number_of_elements > 3:
+                            if command_array[3].isdigit():
+                                nanowrimo.set_nano_goal(SPRINT_BOT_COUNTER[f], int(message.author.id), command_array[3])
+                                output = "Success! You have been enrolled in NaNoWriMo word count tracking with a goal of %s words." % (command_array[3])
+                                await channel.send(output)
+                            else: 
+                                status = -1
+                                response = "Please enter a valid word count!"
+                        else:
+                            status = -1
+                            response = "Please enter a valid word count!"
+                    else:
+                        await channel.send("There currently isn't a NaNoWriMo challenge running! Type `!eb nanowrimo enable` to enable it and begin the competition!")
+
+                if command_array[2] == "withdraw":
+                    if NANOWRIMO_MODE_ENABLED[f] == "Yes":
+                        nanowrimo.delete_nano_goal(SPRINT_BOT_COUNTER[f], int(message.author.id))
+                        await channel.send("NaNoWriMo participation withdrawn!")
+                    else:
+                        await channel.send("There currently isn't a NaNoWriMo challenge running!")
+                
+                if command_array[2] == "check":
+                    if NANOWRIMO_MODE_ENABLED[f] == "Yes":
+                        goal, progress = nanowrimo.see_nano_goal(SPRINT_BOT_COUNTER[f], int(message.author.id))
+                        output = "This month, you have written a total of %s words. Your goal is %s." % (progress, goal)
+                        delta_wc = int(progress) - int(goal)
+                        if delta_wc < 0:
+                            output = output + "\n You've beaten your goal by %s words. Congrats!" % abs(delta_wc)
+                        else:
+                            output = output + "\nYou still have %s words to go!" % abs(delta_wc)
+                        await channel.send(output)
+                    else:
+                        await channel.send("There currently isn't a NaNoWriMo challenge running! Type `!eb nanowrimo enable` to enable it and begin the competition!")
+                
+                if command_array[2] == "enable":
+                    if NANOWRIMO_MODE_ENABLED[f] == "No":
+                        change_configuration("nanowrimo_mode_enabled", "Yes", str(current_guild_id))
+                        await channel.send("A NaNoWriMo competition has been enabled! Enter your word count goal with `!eb nanowrimo enroll [number]` (without brackets).")
+                        await on_ready()
+                    else:
+                        await channel.send("A NaNoWriMo challenge is already running!")
+                    
+                if command_array[2] == "disable":
+                    if NANOWRIMO_MODE_ENABLED[f] == "Yes":
+                        change_configuration("nanowrimo_mode_enabled", "No", str(current_guild_id))
+                        await channel.send("The NaNoWriMo competition has been called off!")
+                        await on_ready()
+                    else:
+                        await channel.send("There currently isn't a NaNoWriMo challenge running!")
+
+                if command_array[2] == "leaderboard":
+                    if NANOWRIMO_MODE_ENABLED[f] == "Yes":
+                        tuples = nanowrimo.nano_leaderboard(SPRINT_BOT_COUNTER[f])
+                        status, output_message = nanowrimo.nano_leaderboard_postprocessing(tuples, client)
+
+                        embed = discord.Embed(title = "⚡ EndoBot @Sprinto Assistant ⚡", color=0x0077ff)
+                        embed.add_field(name = "NaNoWriMo Word Count Totals", inline = False, value = output_message)
+                        embed.set_footer(text = "`!eb nanowrimo enroll [wordcount]` (without brackets) to join!")
+
+                        # Print to Discord
+                        await channel.send(embed = embed)
+                    else:
+                        await channel.send("There currently isn't a NaNoWriMo challenge running!")
+        elif command_array[1] == "admin":
+            if command_array[2] == "forcemorningmessages":
+                if mod == True:
+                    await morning_messages(int(channel.id), current_guild_id)
+                else:
+                    status = -1
+                    response = "Sorry, you lack the necessary permissions to use this command."
+        elif command_array[1] == "welcome":
+            await new_server_welcome_message(int(channel.id))
+
+                    
+
+
+                
         else:
             status = -1
     else:
@@ -1337,41 +2043,117 @@ async def bot_command_processor(message, command_string):
 # ==================================================================================================== #
 # ACTIVE DISCORD ASYNC FUNCTIONS --------------------------------------------------------------------- #
 
-# Startup  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Guild First Run  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 @client.event
-async def on_ready():
+async def on_guild_join(new_guild):
     # Initialize ini reader
     config = configparser.ConfigParser()
 
     # Load in configuration file
     configuration_file = config.read(CONFIG_FILENAME)
+    sections = config.sections()
+    
+    sys_channel = new_guild.system_channel  
+
+    # If the configuration file is missing for some reason, throw an error
+    if not configuration_file:
+        print("INITIALIZATION ERROR: %s file not found." % (CONFIG_FILENAME))
+        quit()
+    else:
+        # Check to see if the current guild has configuration data stored
+        guild_is_found = 0
+        for current_id in sections:
+            if current_id == int(new_guild.id):
+                guild_is_found = 1
+            else:
+                continue
+
+        if guild_is_found == 1:
+            # If the guild is found, do nothing
+            print("NEW GUILD: This guild was already stored in EndoBot's configuration files!")
+        else:
+            # If the guild is not found, generate new configuration data
+            print("NEW GUILD: This guild was NOT already stored in EndoBot's configuration files!\nGenerating relevant files...")
+            initialize_new_server(int(new_guild.id))
+            await on_ready()
+
+            # Replace the default server IDs in the server's configuration file with the system channel
+            change_configuration("system_channel", str(sys_channel.id), str(new_guild.id))
+            change_configuration("starboard_output_channel_id", str(sys_channel.id), str(new_guild.id))
+            change_configuration("spelling_bee_output_channel_id", str(sys_channel.id), str(new_guild.id))
+
+            # Try to post welcome message in the system (#general) channel
+            if sys_channel.permissions_for(new_guild.me).send_messages:
+                await new_server_welcome_message(int(sys_channel.id))
+            # If that doesn't work, try and find the first channel that will allow a message to be posted
+            else:
+                for channel in new_guild.text_channels:
+                    if channel.permissions_for(new_guild.me).send_messages:
+                        await new_server_welcome_message(int(sys_channel.id))
+                        break
+
+# Startup  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+@client.event
+async def on_ready():
+    # Clear the global variable buffers
+    clear_global_variables()
+
+    # Initialize ini reader
+    config = configparser.ConfigParser()
+
+    # Load in configuration file
+    configuration_file = config.read(CONFIG_FILENAME)
+    sections = config.sections()
+
+    # If the configuration file is missing for some reason, throw an error
     if not configuration_file:
         print("INITIALIZATION ERROR: %s file not found." % (CONFIG_FILENAME))
         quit()
     else:
         # Initialize the bot and bot variables
-        error = initialize_bot(CONFIG_FILENAME, GUILD_ID)
-        if error != 0:
-            print("INITIALIZATION ERROR: loading of %s exited with Error Code %d." % (CONFIG_FILENAME, error))
-            quit()
+        for current_id in sections:
+            # Skip the example and default_values sections, as they are purely informational
+            if current_id != "DEFAULT_VALUES" and current_id != "EXAMPLE":
+                error = initialize_bot_globals(CONFIG_FILENAME, current_id)
+                if error != 0:
+                    print("INITIALIZATION ERROR: loading of %s exited with Error Code %d." % (CONFIG_FILENAME, error))
+                    quit()
 
-        # Begin scheduler timer
-        client.loop.create_task(background_task())
+                f = find_guild_position_number(current_id)
+
+                client.loop.create_task(background_task(0, SPELLING_BEE_OUTPUT_CHANNEL_ID[f], current_id))
+        
+        # After this function runs for the first time, set the scheduler global to 1 so it is not reinitialized accidentally upon bot reconnection
+        set_scheduler(1)
 
         # Print message stating that the bot has connected to Discord
+        print("\n\n\n\n\n\n\n\n\n")
         print(f'{client.user.name} has connected to Discord!')
+        print("=========================================================================")
 
 # Message Detection Wrapper  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 @client.event
 async def on_message(message):
     # Print debug line to console
-    print(f'Message detected: @{message.author} in #{message.channel}: {message.content}')
+    print(f'[{message.guild}] #{message.channel} | @{message.author}: {message.content}')
+
+    # Find server ID
+    current_guild_id = int(message.guild.id)
+    f = find_guild_position_number(current_guild_id)
+
+    # Validate that this server's configuration files already exists by validating that "f" != -1, which is a hardcoded error state for a server ID that's not in record
+    if f == -1:
+        print("ERROR: server with ID %s has not been initialized." % (current_guild_id))
+        # quit() - eventually replace with on_guild_join(message.guild)
+        f = 0
 
     # Convert message to all lower-case for easier sorting (if set to do so in configuration file)
-    if(RESPONSE_FLAG_CASE_SENSITIVE == "No"):
+    if(RESPONSE_FLAG_CASE_SENSITIVE[f] == "No"):
         formatted_message = message.content.lower()
+        interim_ML_RF = MACHINE_LEARNING_RESPONSE_FLAG[f].lower()
     else:
         formatted_message = message.content
+        interim_ML_RF = MACHINE_LEARNING_RESPONSE_FLAG[f]
     
     # Ignore all bot messages
     if not message.author.bot:
@@ -1380,29 +2162,29 @@ async def on_message(message):
             await bot_command_processor(message, formatted_message)
 
         # Check for response flag contents if they are the entirety of the text - if so, do not @ the poster
-        elif formatted_message == RESPONSE_FLAG.lower() and RESPONSE_FLAG_CASE_SENSITIVE != "Yes":
+        elif formatted_message == RESPONSE_FLAG[f].lower() and RESPONSE_FLAG_CASE_SENSITIVE[f] != "Yes":
             # parse_gdoc()
 
             # sanitize_file(initial_filename, filename)
 
-            line = find_line(FILENAME)
+            line = find_line(STARBOARD_FILENAME[f])
             await message.channel.send(line)
 
-        elif formatted_message == RESPONSE_FLAG and RESPONSE_FLAG_CASE_SENSITIVE == "Yes":
-            line = find_line(FILENAME)
+        elif formatted_message == RESPONSE_FLAG[f] and RESPONSE_FLAG_CASE_SENSITIVE[f] == "Yes":
+            line = find_line(STARBOARD_FILENAME[f])
             await message.channel.send(line)
 
         # Check for response flag contents if they are anywhere within the content of the text - if so, @ the poster
-        elif formatted_message.find(RESPONSE_FLAG.lower()) != -1 and RESPONSE_FLAG_MATCH_EXACT_CASE != "Yes":
+        elif formatted_message.find(RESPONSE_FLAG[f].lower()) != -1 and RESPONSE_FLAG_MATCH_EXACT_CASE[f] != "Yes":
             # Assign spoken username to variable
             user = message.author
 
-            line = find_line(FILENAME)
+            line = find_line(STARBOARD_FILENAME[f])
             await message.channel.send('{0.author.mention} '.format(message) + line)
         
         # Generate a machine learning response based on the starboard file
-        elif formatted_message == MACHINE_LEARNING_RESPONSE_FLAG:
-            machine_learning = open(FILENAME, encoding='utf8').read()
+        elif formatted_message == interim_ML_RF:
+            machine_learning = open(STARBOARD_FILENAME[f], encoding='utf8').read()
             machine_learning_wordsplit = machine_learning.split()
 
             pairs = make_pairs(machine_learning_wordsplit)
@@ -1425,13 +2207,13 @@ async def on_message(message):
             await message.channel.send(' '.join(chain))
         
         else:
-            with open(HOTWORDS_FILENAME, "r") as hotwords_file:
+            with open(HOTWORDS_FILENAME[f], "r") as hotwords_file:
                 # Read in hotwords_file CSV
-                hotwords_read = csv.reader(hotwords_file, delimiter = '🍔')
+                hotwords_read = csv.reader(hotwords_file, delimiter = HOTWORDS_DELIMITER[f])
 
                 # Check each row in the CSV for the trigger word (in any format)
                 for row_split in hotwords_read:
-                    # row_split = row[0].split("🍔")
+                    # row_split = row[0].split(HOTWORDS_DELIMITER)
                     if formatted_message.find(row_split[0]) != -1:
                         # If the word is found, check to see if the bot should @ the user or not
                         if row_split[2] == "Yes" or row_split[2] == "yes":
@@ -1446,37 +2228,48 @@ async def on_message(message):
         # Check message to see if it is an end-of-sprint message
         if message.content.find("🏆 **CONGRATS EVERYONE**") != -1:
             # Process sprint values and add to total counter
-            status, response = sprint_bot_word_count_processor(message.content, SPRINT_BOT_COUNTER)
+            status, response = sprint_bot_word_count_processor(message.content, SPRINT_BOT_COUNTER[f], current_guild_id)
             # If there were no problems, also print out the current leaderboard
-            if status == 0 and (SPRINT_BOT_AUTOTRIGGER == "Yes" or SPRINT_BOT_AUTOTRIGGER == "yes"):
-                await sprint_leaderboard(SPRINT_BOT_COUNTER, message)
-        
+            if status == 0 and (SPRINT_BOT_AUTOTRIGGER[f] == "Yes" or SPRINT_BOT_AUTOTRIGGER[f] == "yes"):
+                await sprint_leaderboard(SPRINT_BOT_COUNTER[f], int(message.channel.id), 1)
+                # If NaNo is enabled, then also output a NaNo embed
+                if(NANOWRIMO_MODE_ENABLED[f] == "Yes" or NANOWRIMO_MODE_ENABLED[f] == "Yes"):
+                    tuples = nanowrimo.nano_leaderboard(SPRINT_BOT_COUNTER[f])
+                    status, output_message = nanowrimo.nano_leaderboard_postprocessing(tuples, client)
 
+                    embed = discord.Embed(title = "⚡ EndoBot @Sprinto Assistant ⚡", color=0x0077ff)
+                    embed.add_field(name = "NaNoWriMo Word Count Totals", inline = False, value = output_message)
+                    embed.set_footer(text = "`!eb nanowrimo enroll [wordcount]` (without brackets) to join!")
 
-
+                    # Print to Discord
+                    await message.channel.send(embed = embed)
+                
 # Starboard Emoji Reaction Parser  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 @client.event
 async def on_raw_reaction_add(payload):
-    # if payload.channel_id == [[some channel id]]:
     channel = client.get_channel(payload.channel_id)
     message = await channel.fetch_message(payload.message_id)
     reaction = get(message.reactions, emoji = payload.emoji.name)
 
-    output_channel = STARBOARD_OUTPUT_CHANNEL_ID 
+    # Find server ID
+    current_guild_id = int(message.guild.id)
+    f = find_guild_position_number(current_guild_id)
 
-    if payload.emoji.name == STARBOARD_EMOJI_DELIMITER:
+    output_channel = STARBOARD_OUTPUT_CHANNEL_ID[f] 
+
+    if payload.emoji.name == STARBOARD_EMOJI_DELIMITER[f] and STARBOARD_FUNCTION_ENABLE[f] == "Yes":
         count = reaction.count
-        if count > (int(STARBOARD_REACTION_THRESHOLD) - 1):
+        if count > (int(STARBOARD_REACTION_THRESHOLD[f]) - 1):
 
             # Verify that a receipts file exists; if one doesn't, create it
-            if not exists(RECEIPTS_FILENAME):
-                with open(RECEIPTS_FILENAME, "w") as receipts_file:
+            if not exists(STARBOARD_RECEIPTS_FILENAME[f]):
+                with open(STARBOARD_RECEIPTS_FILENAME[f], "w") as receipts_file:
                     receipts_write = csv.writer(receipts_file)
 
             # Check the receipts file to see if there's already an auto-generated response message created for that reacted discord message
             post_already_exists_flag = 0
 
-            with open(RECEIPTS_FILENAME, "r") as receipts_file:
+            with open(STARBOARD_RECEIPTS_FILENAME[f], "r") as receipts_file:
                 # Process receipts file using the CSV library
                 receipts_read = csv.reader(receipts_file)
 
@@ -1494,58 +2287,80 @@ async def on_raw_reaction_add(payload):
                 response_id = await build_starboard_message(payload, output_channel, message, count)
 
                 # Export the message_id and the response_id to receipts.csv
-                with open(RECEIPTS_FILENAME, "a") as receipts_file:
+                with open(STARBOARD_RECEIPTS_FILENAME[f], "a") as receipts_file:
                     receipts_write = csv.writer(receipts_file)
                     receipts_write.writerow([message.author.id, payload.message_id, response_id.id])
                 
                 # Put the sin in the sin bin (if there's actually content in the message)
                 if message.content:
-                    with open(FILENAME, "a") as sinbin:
+                    with open(STARBOARD_FILENAME[f], "a") as sinbin:
                         output_message = "%s\n" % (message.content)
                         sinbin.write(output_message)
 
 # Post Scheduler - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 @tasks.loop(hours=24)
-async def called_once_a_day():
+async def called_once_a_day(output_channel, current_guild_id):
     await client.wait_until_ready()
-    await spelling_bee_printer(SPELLING_BEE_OUTPUT_CHANNEL_ID)
+    await morning_messages(output_channel, current_guild_id)
 
-async def background_task():
+async def background_task(force_flag, output_channel, current_guild_id):
+    DELAY = 15
+    DAY_SECONDS = 86400
+
+    f = find_guild_position_number(current_guild_id)
+    
     # Build up the daily message time value from numbers acquired in the configuration.ini file
-    sb_status, sb_hour, sb_minute, sb_second = time_processor(SPELLING_BEE_POST_TIME)
+    sb_status, sb_hour, sb_minute, sb_second = time_processor(SPELLING_BEE_POST_TIME[f])
     if sb_status == 0:
         DAILY_MESSAGE_TIME = datetime.time(sb_hour, sb_minute, sb_second)      
 
-    # Run in a continuous loop
-    while True:
-        # Obtain the current time
-        now = datetime.datetime.utcnow()
+    if DAILY_MESSAGE_SCHEDULER_CURRENT_STATE[f] == 0 or force_flag == 1:
+        # Set current_state flag to 1 so the bot knows if there's already a schedule running
+        DAILY_MESSAGE_SCHEDULER_CURRENT_STATE[f] == 1
 
-        # Calculate how long it will be until the next trigger time
-        target_time = datetime.datetime.combine(now.date(), DAILY_MESSAGE_TIME)
-        seconds_until_target = (target_time - now).total_seconds()
+        # Run in a continuous loop
+        while True:
+            # Obtain the current time
+            now = datetime.datetime.utcnow()
 
-        # If the trigger time is the next calendar day, add in a full day of seconds to the timer
-        if seconds_until_target <= 0:
-            seconds_until_target = 86400 + seconds_until_target
+            # Calculate how long it will be until the next trigger time
+            target_time = datetime.datetime.combine(now.date(), DAILY_MESSAGE_TIME)
+            seconds_until_target = (target_time - now).total_seconds()
 
-        print("SCHEDULER FUNCTION: the current time is %s. The scheduled time is %s, which is in appx. %s seconds." % (now, DAILY_MESSAGE_TIME, str(seconds_until_target)))
+            # If the trigger time is the next calendar day, add in a full day of seconds to the timer
+            if seconds_until_target <= 0:
+                seconds_until_target = DAY_SECONDS + seconds_until_target
 
-        # Tell the bot to wait that many seconds
-        await asyncio.sleep(seconds_until_target)
+            print("[%s] SCHEDULER: the current time is %s. The scheduled time is %s, which is in appx. %s seconds." % (client.get_guild(int(current_guild_id)), now, DAILY_MESSAGE_TIME, str(seconds_until_target)))
 
-        # Once waited, execute the daily scheduled function - with an added check to make sure that it's not an accidental misfire
-        now_validate = datetime.datetime.utcnow()
-        target_time_validate = datetime.datetime.combine(now_validate.date(), DAILY_MESSAGE_TIME)
-        seconds_until_target_validate = (target_time_validate - now_validate).total_seconds()
-        if abs(seconds_until_target_validate - seconds_until_target) < 100:
-            await called_once_a_day()
+            if force_flag == 0:
+                # Tell the bot to wait that many seconds
+                await asyncio.sleep(seconds_until_target)
 
-        # A ten-second delay after execution to give the scheduled function enough time to parse through large HTML files
-        await asyncio.sleep(10)
+            await called_once_a_day(output_channel, current_guild_id) 
+
+            if force_flag == 1:
+                break
+    
+        if force_flag == 0:
+            # if the bot gets out of its loop for some reason, set the scheduler back to 0
+            DAILY_MESSAGE_SCHEDULER_CURRENT_STATE[f] = 0
+            interim_string = "[%s] SCHEDULER: the scheduler reached its terminus. Resetting back to 0." % (client.get_guild(int(current_guild_id)))
+            print(interim_string)
+    
+    else:
+        interim_string = "[%s] SCHEDULER: the scheduler is already running. Duplicate schedule removed." % (client.get_guild(int(current_guild_id)))
+        print(interim_string)
 
 # INIT - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 if __name__ == "__main__":
+    # Load bot token
+    TOKEN = load_bot_token(TOKEN_FILENAME)
+
+    # Initialize scheduler
+    set_scheduler(0)
+
+    # Begin Bot
     client.run(TOKEN)
 
 # --------------------------------------------------------------------- ACTIVE DISCORD ASYNC FUNCTIONS #
