@@ -32,13 +32,17 @@ import csv
 import re
 import shutil
 import os
+import threading
 
 import requests
-from html2image import Html2Image
 import configparser
+from selenium import webdriver # pip install selenium
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager # pip install webdriver-manager
 
 import nanowrimo
 import dataprocessing
+import wordsprints
 
 # Enables ability to check member IDs within a server (used for Leaderboard functionality)
 # This requires a specific permission through Discord's API and will need to be renewed periodically
@@ -82,13 +86,22 @@ SPELLING_BEE_PNG = list()
 SPRINT_BOT_COUNTER = list()
 SPRINT_BOT_INDIVIDUAL_COUNTER_FOLDER = list()
 SPRINT_BOT_AUTOTRIGGER = list()
+SPRINT_BOT_SKIP_ZERO_DAYS = list()
+SPRINT_BOT_FORCE_ALL_SPRINT_HISTORY = list()
 NANOWRIMO_MODE_ENABLED = list()
 SCHEDULER_FILENAME = list()
 COMMAND_LIST_FILENAME = list()
 
+# This variable tells the Bot if a server's scheduler is running or not
 DAILY_MESSAGE_SCHEDULER_CURRENT_STATE = list()
 
+REBOOT_SCHEDULER_FLAG = None
+
+# This variable tells the Bot whether or not it has run initial scheduler setup or not
 MESSAGE_SCHEDULER_INIT_FLAG = None
+
+# Global Clock - current UTC time, taken every second
+GLOBAL_CLOCK = None
 
 # ----------------------------------------------------------------------- IMPORTS AND GLOBAL VARIABLES #
 # ==================================================================================================== #
@@ -122,6 +135,23 @@ def set_scheduler(value):
     global MESSAGE_SCHEDULER_INIT_FLAG
     MESSAGE_SCHEDULER_INIT_FLAG = value
 
+def set_scheduler_reboot_flag(value):
+    global REBOOT_SCHEDULER_FLAG
+    REBOOT_SCHEDULER_FLAG = value
+    
+def set_global_clock(value):
+    global GLOBAL_CLOCK
+    GLOBAL_CLOCK = value
+
+def global_clock():
+    threading.Timer(1, global_clock).start()
+
+    now = datetime.datetime.utcnow()
+
+    current_time = now.strftime("%H:%M:%S")
+    set_global_clock(current_time)
+    
+    
 # initialize_bot_globals - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # Initializes the bot with configuration information read from an INI file and populates the global variable lists
 # INPUTS:
@@ -155,6 +185,8 @@ def initialize_bot_globals(config_filename, servername):
     global SPRINT_BOT_COUNTER
     global SPRINT_BOT_INDIVIDUAL_COUNTER_FOLDER
     global SPRINT_BOT_AUTOTRIGGER
+    global SPRINT_BOT_SKIP_ZERO_DAYS
+    global SPRINT_BOT_FORCE_ALL_SPRINT_HISTORY
     global NANOWRIMO_MODE_ENABLED
     global SCHEDULER_FILENAME
     global COMMAND_LIST_FILENAME
@@ -289,6 +321,16 @@ def initialize_bot_globals(config_filename, servername):
         return -24
     SPRINT_BOT_AUTOTRIGGER.append(current_value)
 
+    exists, current_value = read_ini_file(config_filename, servername, "sprint_bot_skip_zero_days")
+    if exists == -1:
+        return -28
+    SPRINT_BOT_SKIP_ZERO_DAYS.append(current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "sprint_bot_force_all_sprint_history")
+    if exists == -1:
+        return -29
+    SPRINT_BOT_FORCE_ALL_SPRINT_HISTORY.append(current_value)
+
     exists, current_value = read_ini_file(config_filename, servername, "nanowrimo_mode_enabled")
     if exists == -1:
         return -25
@@ -338,6 +380,8 @@ def clear_global_variables():
     SPRINT_BOT_COUNTER.clear()
     SPRINT_BOT_INDIVIDUAL_COUNTER_FOLDER.clear()
     SPRINT_BOT_AUTOTRIGGER.clear()
+    SPRINT_BOT_SKIP_ZERO_DAYS.clear()
+    SPRINT_BOT_FORCE_ALL_SPRINT_HISTORY.clear()
     NANOWRIMO_MODE_ENABLED.clear()
     SCHEDULER_FILENAME.clear()
     COMMAND_LIST_FILENAME.clear()
@@ -349,7 +393,7 @@ def clear_global_variables():
 # RETURNS:
 #       - N/A
 def initialize_new_server(new_guild_id):
-    # Build filepaths for files to be duplicated - this part isn't strictly necessary but to ensure nothing acts strangely from missing files before they're properly generated, this part is included
+    # Build filepaths for files to be duplicated - this part isn't strictly necessary, but to ensure nothing acts strangely from missing files before they're properly generated, this part is included
     default_external_media_file = DEFAULTS_FOLDER + "/external_media.csv"
     default_hotwords_file = DEFAULTS_FOLDER + "/hotwords.csv"
     default_receipts_file = DEFAULTS_FOLDER + "/receipts.csv"
@@ -950,11 +994,16 @@ def sprint_bot_word_count_processor(message_contents, sprint_bot_counter_filenam
         # Split the User ID and the word count apart
         interim = i.split("> — **")
         current_sprinter_id = interim[0]
-        
-        if i.find("deleted") != -1:
+
+        if i.find("word deleted") != -1:
+            interim2 = interim[1].split(" word deleted**")
+            interim2[0] = "-" + interim2[0]
+        elif i.find("words deleted") != -1:
             interim2 = interim[1].split(" words deleted**")
             interim2[0] = "-" + interim2[0]
-        else:
+        elif i.find("word**") != -1:
+            interim2 = interim[1].split(" word**")
+        elif i.find("words**") != -1:
             interim2 = interim[1].split(" words**")
 
         current_sprinter_wc = interim2[0]
@@ -1014,60 +1063,6 @@ def sprint_bot_word_count_processor(message_contents, sprint_bot_counter_filenam
         status = dataprocessing.dump_to_user_file(SPRINT_BOT_INDIVIDUAL_COUNTER_FOLDER[f], current_sprinter_id, today_dateformatted, current_sprinter_wc)
 
     return status, output_string
-
-
-# adjust_sprintstats - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
-# Adds or subtracts numerical values from a certain user's sprint stats
-# INPUTS:
-#       - (int) value: the value that will be added or subtracted from the day and sum total
-#       - (int) user_id: the discord id of the user whose totals will be adjusted
-#       - (string) sprint_bot_counter_filename: the location of the CSV file where the historical sprint data is stored
-# RETURNS:
-#       - (int) error: an error code. 0 if all is well, -1 if the user is not listed in the documentation.
-def adjust_sprintstats(value, user_id, sprint_bot_counter_filename):
-    error = 0
-    found_user = 0
-
-    # Check to make sure if the user with id user_id is actually in the sprint document
-    temp_file = list()
-
-    # Read through data file
-    with open(sprint_bot_counter_filename, "r") as loaded_file:
-        reader = csv.reader(loaded_file, delimiter = ",")
-
-        # Print to temp file while also checking if user ID already exists
-        for row in reader:
-            temp_file.append(row)
-            for current_id in row:
-                if current_id == str(user_id):
-                    found_user = 1
-                    
-                    # If the user ID is found, remove it from the temp file
-                    temp_file.remove(row)
-
-                    # Adjust the word count values
-                    wc = int(value) + int(row[1])
-                    week_wc = int(value) + int(row[2])
-                    month_wc = int(value) + int(row[3])
-                    year_wc = int(value) + int(row[4])
-                    lifetime_wc = int(value) + int(row[5])
-                    NaNo_Goal = int(row[6])
-
-                    # Print the new adjusted word count back to the CSV
-                    out = [user_id, str(wc), str(week_wc), str(month_wc), str(year_wc), str(lifetime_wc), str(NaNo_Goal)]
-                    # output_string += "@%s: %s words\n" % (username, str(wc))
-                    temp_file.append(out)
-
-        # If the user is new to the list, return an error
-        if found_user != 1:
-            error = -1
-            
-        # Print the temp file back out to the CSV file
-        with open(sprint_bot_counter_filename, "w") as loaded_file:
-            writer = csv.writer(loaded_file, delimiter = ",")
-            writer.writerows(temp_file)
-
-    return error
 
 # sprint_counter_daily_cleanup - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # Every day, resets the daily sprint count cumulative total for each sprinter to zero
@@ -1398,11 +1393,12 @@ async def leaderboard(receipts_filename, message, current_guild_id):
 # INPUTS:
 #       - (string) sprint_counter_filename: the location of the sprint counter CSV file to be processed
 #       - (int) channel_id: the message that triggered this function and its metadata (used for printing to the right channel)
-#       - (bool) print_message: yes/no.
+#       - (bool) print_message: 0 = No, 1 = Yes, 2 = force override of limited sprint lists.
+#       - (int) current_guild_id: the ID for the current guild. Used for global variable parsing.
 # RETURNS:
 #       - (bool) status: -1 if there's a problem, 0 if okay (if necessary)
 #       - (string) output_message: an output message to print (if necessary)
-async def sprint_leaderboard(sprint_counter_filename, channel_id, print_message):
+async def sprint_leaderboard(sprint_counter_filename, channel_id, print_message, current_guild_id):
     user_id = list()
     day_word_count = list()
     week_word_count = list()
@@ -1411,6 +1407,9 @@ async def sprint_leaderboard(sprint_counter_filename, channel_id, print_message)
     lifetime_word_count = list()
 
     total_day_count_across_all_users = 0
+
+    # Find current guild position within stored global variables
+    f = find_guild_position_number(current_guild_id)
 
     # Open the sprint count file
     with open(sprint_counter_filename, "r") as opened_file:
@@ -1428,7 +1427,7 @@ async def sprint_leaderboard(sprint_counter_filename, channel_id, print_message)
         zipped_list = zip(user_id, day_word_count, week_word_count, month_word_count, year_word_count, lifetime_word_count)
 
         # If generating message on command, sort by yearly total (column 4). Otherwise, sort by daily total (column 1) 
-        if print_message:
+        if print_message != 0:
             sorted_list = sorted(zipped_list, key = lambda x: x[4], reverse = True)
         else:
             sorted_list = sorted(zipped_list, key = lambda x: x[1], reverse = True)
@@ -1439,33 +1438,58 @@ async def sprint_leaderboard(sprint_counter_filename, channel_id, print_message)
 
         output_message = ""
 
+        iterator = 1
+
         # Print out sorted results to embed
         for i, j, k, l, m, n in zip(user_list, day_wc, week_wc, month_wc, year_wc, lifetime_wc):
+            # Reset output_message_interim
+            output_message_interim = ""
+
+            # Get current user based on User ID
             username = client.get_user(int(i))
             split_username = str(username).split("#")
-            if print_message:
-                output_message_interim = "**@%s**: %d words today - %d words YTD - %d words lifetime\n" % (split_username[0], int(j), int(m), int(n))
+
+            # Build output string for either the daily messages (print_message == TRUE) or for individual sprints/a la carte leaderboard requests (print_message == FALSE)
+            if print_message != 0:
+                if SPRINT_BOT_FORCE_ALL_SPRINT_HISTORY[f] == "Yes" or print_message == 2:
+                    output_message_interim = "`%d.` **@%s**: %d words today; %d words YTD; %d words lifetime\n" % (iterator, split_username[0], int(j), int(m), int(n))
+                    iterator += 1
+                elif SPRINT_BOT_FORCE_ALL_SPRINT_HISTORY[f] == "No":
+                    if int(j) != 0:
+                        output_message_interim = "`%d.` **@%s**: %d words today; %d words YTD; %d words lifetime\n" % (iterator, split_username[0], int(j), int(m), int(n))
+                        iterator += 1
             else:
-                output_message_interim = "**@%s**: %d words yesterday - %d words YTD - %d words lifetime\n" % (split_username[0], int(j), int(m), int(n))
+                if SPRINT_BOT_FORCE_ALL_SPRINT_HISTORY[f] == "Yes":
+                    output_message_interim = "`%d.` **@%s**: %d words yesterday; %d words YTD; %d words lifetime\n" % (iterator, split_username[0], int(j), int(m), int(n))
+                    iterator += 1
+                elif SPRINT_BOT_FORCE_ALL_SPRINT_HISTORY[f] == "No":
+                    if int(j) != 0:
+                        output_message_interim = "`%d.` **@%s**: %d words yesterday; %d words YTD; %d words lifetime\n" % (iterator, split_username[0], int(j), int(m), int(n))
+                        iterator += 1
+
             total_day_count_across_all_users += int(j)
             output_message = output_message + output_message_interim
 
         # Build up embed, but only if print_message is true
         if print_message:
-            embed = discord.Embed(title = "⚡ EndoBot @Sprinto Assistant ⚡", color=0x0077ff)
-            
-            embed.add_field(name = "Cumulative Word Count Totals", inline = False, value = output_message)
+            # If the bot is not supposed to print anything when no users have sprinted that day, change the output message to reflect that
+            if SPRINT_BOT_FORCE_ALL_SPRINT_HISTORY[f] == "No" and total_day_count_across_all_users == 0:
+                output_message = "No words have been sprinted yet today!"
+
+            second_output_message = "⚡ **ENDOBOT @SPRINTO ASSISTANT** ⚡\n" + output_message
 
             # Print to Discord
             channel = client.get_channel(int(channel_id))
-            await channel.send(embed = embed)
+            await channel.send(second_output_message)
 
             return 0, None
         # Otherwise, prepare a report for the morning messages
         else:
             second_output_message = "Yesterday, %d new words were written. Here are the totals:\n\n%s" % (total_day_count_across_all_users, output_message)
-            
-            return 0, second_output_message
+            if total_day_count_across_all_users == 0:
+                return -20, second_output_message
+            else:
+                return 0, second_output_message
 
 # spelling_bee_builder - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # Takes the daily NYT Spelling Bee puzzle from the spelling bee website, converts the HTML into an image, and 
@@ -1526,8 +1550,16 @@ def spelling_bee_builder(current_guild_id):
         working_html_document.write(output_string)
 
     # Convert the generated HTML into a PNG
-    hti = Html2Image()
-    hti.screenshot(html_file=SPELLING_BEE_HTML[f], css_file=SPELLING_BEE_CSS[f], save_as=SPELLING_BEE_PNG[f], size=(305, 300))
+    options = webdriver.ChromeOptions()
+    options.headless = True
+    driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
+
+    abs_path = os.path.abspath(SPELLING_BEE_HTML[f])
+    abs_path_with_header = "file://" + abs_path
+    driver.get(abs_path_with_header)
+
+    driver.set_window_size(width=302, height=290)
+    driver.get_screenshot_as_file("spelling_bee.png")
 
     # Print the puzzle solutions, regardless of however many there may be
     output_string_interim = ""
@@ -1535,7 +1567,7 @@ def spelling_bee_builder(current_guild_id):
     for i in answers:
         output_string_interim = output_string_interim + "(" + str(count) + "): ||" + i + "||\n"
         count += 1
-    spelling_bee_solutions = "```cs\n# Today's Spelling Bee Solutions #```\nRemember that all letters must be used at least once in the day's winning word(s) - that means letters can be repeated as many times as necessary!\n\n" + output_string_interim
+    spelling_bee_solutions = "```cs\n# Today's Spelling Bee Solutions #```Remember that all letters must be used at least once in the day's winning word(s) - that means letters can be repeated as many times as necessary!\n\n" + output_string_interim
     return spelling_bee_solutions
 
 # spelling_bee_printer - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
@@ -1651,8 +1683,10 @@ async def list_configuration(message, current_guild_id):
 # OUTPUTS:
 #       - N/A
 
-async def morning_messages(channel_id, current_guild_id):
+async def morning_messages(channel_id, current_guild_id, force_flag):
     today = datetime.datetime.now()
+
+    words_written = False
 
     # Find current guild position within stored global variables
     f = find_guild_position_number(current_guild_id)
@@ -1677,16 +1711,24 @@ async def morning_messages(channel_id, current_guild_id):
             embed.add_field(name = "\u200b", inline = False, value = output_message)
 
     # Calculate and print the sprint leaderboard
-    status, sprint_output = await sprint_leaderboard(SPRINT_BOT_COUNTER[f], int(channel_id), 0)
+    status, sprint_output = await sprint_leaderboard(SPRINT_BOT_COUNTER[f], int(channel_id), 0, current_guild_id)
     output_message = "```cs\n# Yesterday's Sprint Totals #```%s" % sprint_output
     embed.add_field(name = "\u200b", inline = False, value = output_message)
 
-    # Reset the daily sprint counter for each user
-    status = await sprint_counter_daily_cleanup(SPRINT_BOT_COUNTER[f], current_guild_id)
+    if status == -20:
+        # No words were written in the previous day
+        words_written = False
+    else:
+        words_written = True
+
+    # If forced, do not reset the daily counter (allows for morning messages at any time of the day)
+    if force_flag == 0:
+        # Reset the daily sprint counter for each user
+        status = await sprint_counter_daily_cleanup(SPRINT_BOT_COUNTER[f], current_guild_id)
 
     if SPELLING_BEE_AUTO_POST[f] == "Yes":
         # Print the link to the day's Wordle
-        output_message = "```cs\n# Today's Wordle #```The Wordle of the Day can be found [here!](https://www.nytimes.com/games/wordle/index.html)"
+        output_message = "```cs\n# Today's Online Puzzles #```The Wordle of the Day can be found [here!](https://www.nytimes.com/games/wordle/index.html)\nThe Quordle of the Day can be found [here!](https://www.quordle.com/#/)\nThe Weaver of the Day can be found [here!](https://wordwormdormdork.com/)"
         embed.add_field(name = "\u200b", inline = False, value = output_message)
 
         # Print details about the day's NYT Spelling Bee
@@ -1704,12 +1746,21 @@ async def morning_messages(channel_id, current_guild_id):
     footer_string = "Day of %s" % (today.strftime("%d %B %Y"))
     embed.set_footer(text = footer_string)
 
-    # Print embed to Discord
-    channel = client.get_channel(int(channel_id))
-    if SPELLING_BEE_AUTO_POST[f] == "Yes":
-        await channel.send(file = file, embed = embed)
-    else:
-        await channel.send(embed = embed)
+    # If the server is configured not to post when there have been no sprints that day, then skip the morning messages
+    if words_written == True and SPRINT_BOT_SKIP_ZERO_DAYS[f] == "Yes":
+        # Print embed to Discord
+        channel = client.get_channel(int(channel_id))
+        if SPELLING_BEE_AUTO_POST[f] == "Yes":
+            await channel.send(file = file, embed = embed)
+        else:
+            await channel.send(embed = embed)
+    elif words_written == False and SPRINT_BOT_SKIP_ZERO_DAYS[f] == "No":
+        # Print embed to Discord
+        channel = client.get_channel(int(channel_id))
+        if SPELLING_BEE_AUTO_POST[f] == "Yes":
+            await channel.send(file = file, embed = embed)
+        else:
+            await channel.send(embed = embed)
 
 # bot_command_processor  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # A function that specifically processes through !eb prefixed messages and sorts out respondable prompts from the following line items
@@ -1758,6 +1809,11 @@ async def bot_command_processor(message, command_string):
 
     # Check if the user is a moderator/has admin privileges
     if message.author.guild_permissions.administrator:
+        mod = True
+    else:
+        mod = False
+
+    if message.author.id == int("330900130997862400"):
         mod = True
     else:
         mod = False
@@ -1822,8 +1878,10 @@ async def bot_command_processor(message, command_string):
                         response = "Sorry, you lack the necessary permissions to use this command."
                 elif command_array[2] == "list":
                     status, response = await list_hotwords(HOTWORDS_FILENAME[f], message)
+
         elif command_array[1] == "leaderboard":
             status, response = await leaderboard(STARBOARD_RECEIPTS_FILENAME[f], message)
+
         elif command_array[1] == "sprintstats":
             if number_of_elements > 2:
                 if command_array[2] == "edit":
@@ -1857,9 +1915,9 @@ async def bot_command_processor(message, command_string):
                                 else:
                                     value_to_pass = abs(value_to_pass)
 
-                                adjust_sprintstats(value_to_pass, user_id, SPRINT_BOT_COUNTER[f])
+                                wordsprints.adjust_sprintstats(value_to_pass, user_id, SPRINT_BOT_COUNTER[f])
                                 await channel.send("Sprint leaderboard updated!")
-                                status, response = await sprint_leaderboard(SPRINT_BOT_COUNTER[f], int(message.channel.id), 1)
+                                status, response = await sprint_leaderboard(SPRINT_BOT_COUNTER[f], int(message.channel.id), 1, current_guild_id)
                             
                             else:
                                 status = -1
@@ -1874,13 +1932,17 @@ async def bot_command_processor(message, command_string):
                     else:
                         status = -1
                         response = "Sorry, you lack the necessary permissions to use this command."
-                else:
-                    status, response = await sprint_leaderboard(SPRINT_BOT_COUNTER[f], int(message.channel.id), 1)
+                elif command_array[2] == "leaderboard":
+                    status, response = await sprint_leaderboard(SPRINT_BOT_COUNTER[f], int(message.channel.id), 1, current_guild_id)
+                elif command_array[2] == "fullleaderboard":
+                    status, response = await sprint_leaderboard(SPRINT_BOT_COUNTER[f], int(message.channel.id), 2, current_guild_id)
 
         elif command_array[1] == "fullhelp":
             status, response = await bot_fullhelp(message)
+
         elif command_array[1] == "help":
             status, response = await bot_help(message)
+
         elif command_array[1] == "randomizer":
             if number_of_elements > 2:
                 status = 0
@@ -1889,24 +1951,21 @@ async def bot_command_processor(message, command_string):
             else:
                 status = -1
                 response = "You're missing a URL!"
+
         elif command_array[1] == "spellingbee":
             spelling_bee_solutions = spelling_bee_builder(current_guild_id)
             await spelling_bee_printer(int(message.channel.id), spelling_bee_solutions, current_guild_id)
-        elif command_array[1] == "debug":
-            if message.author.id != int("330900130997862400"):
-                status = -1
-                response = "Sorry, you lack the necessary permissions to use this command."
-            else:
-                ## PLACE COMMANDS UNDER DEVELOPMENT HERE ##
-                status = await sprint_counter_daily_cleanup(SPRINT_BOT_COUNTER[f], current_guild_id)
+
         elif command_array[1] == "reboot":
             if mod == True:
                 await channel.send("Rebooting EndoBot....")
                 await on_ready()
+                await asyncio.sleep(2)
                 await channel.send("EndoBot rebooted!")
             else:
                 status = -1
                 response = "Sorry, you lack the necessary permissions to use this command."
+
         elif command_array[1] == "config":
             if mod == True:
                 if number_of_elements > 2:
@@ -1937,11 +1996,11 @@ async def bot_command_processor(message, command_string):
 
                                     status, response = change_configuration(config_category, new_value, str(current_guild_id))
                                     await channel.send(response)
+                                    await on_ready()
                             else:
                                 status = -1
                         else:
                             status = -1
-
             else:
                 status = -1
                 response = "Sorry, you lack the necessary permissions to use this command."
@@ -2013,19 +2072,38 @@ async def bot_command_processor(message, command_string):
                         await channel.send(embed = embed)
                     else:
                         await channel.send("There currently isn't a NaNoWriMo challenge running!")
+
         elif command_array[1] == "admin":
             if command_array[2] == "forcemorningmessages":
                 if mod == True:
-                    await morning_messages(int(channel.id), current_guild_id)
+                    await morning_messages(int(channel.id), current_guild_id, 1)
                 else:
                     status = -1
                     response = "Sorry, you lack the necessary permissions to use this command."
+
         elif command_array[1] == "welcome":
             await new_server_welcome_message(int(channel.id))
-
+        
+        elif command_array[1] == "dev1":
+            if message.author.id != int("330900130997862400"):
+                status = -1
+                response = "Sorry, you lack the necessary permissions to use this command."
+            else:
+                ## PLACE COMMANDS UNDER DEVELOPMENT HERE ##
+                output_graph = "output_graph.png"
+                status = dataprocessing.test_graph("Servers", current_guild_id, str(command_array[2]), output_graph)
+                if status != -1:
+                    embed = discord.Embed(title = "User Sprint Graph Over Time", color=0x0077ff)
                     
+                    file = discord.File(output_graph)
+                    image_string = "attachment://" + output_graph
+                    embed.set_image(url = image_string)
 
+                    await channel.send(file = file, embed = embed)
 
+        elif command_array[1] == "dev2":
+            result = wordsprints.test_script(client, command_array[2])
+            await channel.send(result)
                 
         else:
             status = -1
@@ -2081,6 +2159,7 @@ async def on_guild_join(new_guild):
             change_configuration("system_channel", str(sys_channel.id), str(new_guild.id))
             change_configuration("starboard_output_channel_id", str(sys_channel.id), str(new_guild.id))
             change_configuration("spelling_bee_output_channel_id", str(sys_channel.id), str(new_guild.id))
+            await on_ready()
 
             # Try to post welcome message in the system (#general) channel
             if sys_channel.permissions_for(new_guild.me).send_messages:
@@ -2120,16 +2199,52 @@ async def on_ready():
                     quit()
 
                 f = find_guild_position_number(current_id)
+                
+                if MESSAGE_SCHEDULER_INIT_FLAG == 0:
+                    client.loop.create_task(background_task(0, SPELLING_BEE_OUTPUT_CHANNEL_ID[f], current_id))
+                elif MESSAGE_SCHEDULER_INIT_FLAG == 1:
+                    print("[SCHEDULER] The scheduler has already been initialized. Skipping re-initialization.")
 
-                client.loop.create_task(background_task(0, SPELLING_BEE_OUTPUT_CHANNEL_ID[f], current_id))
-        
+        # ---- DEBUG
+        # DM me that the bot has started or restarted
+        at_endo = await client.fetch_user(330900130997862400)
+        if MESSAGE_SCHEDULER_INIT_FLAG == 0:
+            await at_endo.send("The bot has booted!")
+        elif MESSAGE_SCHEDULER_INIT_FLAG == 1:
+            await at_endo.send("The bot has rebooted!")
+
         # After this function runs for the first time, set the scheduler global to 1 so it is not reinitialized accidentally upon bot reconnection
         set_scheduler(1)
+
 
         # Print message stating that the bot has connected to Discord
         print("\n\n\n\n\n\n\n\n\n")
         print(f'{client.user.name} has connected to Discord!')
         print("=========================================================================")
+
+
+# # On Bot Disconnect - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# @client.event
+# async def on_disconnect():
+#     # Print message stating that the bot has connected to Discord
+#     print("=========================================================================")
+#     print(f'{client.user.name} has disconnected from Discord!')
+
+#     # Enable the trigger that kills each thread
+#     set_scheduler_reboot_flag(1)
+
+#     # Wait until each thread has gone through its one second cycle
+#     await asyncio.sleep(2)
+
+#     # Disable the trigger that kills each thread
+#     set_scheduler_reboot_flag(0)
+
+#     # Tell the Bot that the scheduler can be reset again 
+#     set_scheduler(0)
+    
+#     print("DISCONNECTED - rebooting EndoBot....")
+#     os.execv(sys.argv[0], sys.argv)
+    
 
 # Message Detection Wrapper  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 @client.event
@@ -2138,111 +2253,113 @@ async def on_message(message):
     print(f'[{message.guild}] #{message.channel} | @{message.author}: {message.content}')
 
     # Find server ID
-    current_guild_id = int(message.guild.id)
-    f = find_guild_position_number(current_guild_id)
+    if not isinstance(message.channel, discord.channel.DMChannel):
+        current_guild_id = int(message.guild.id)
+        f = find_guild_position_number(current_guild_id)
 
-    # Validate that this server's configuration files already exists by validating that "f" != -1, which is a hardcoded error state for a server ID that's not in record
-    if f == -1:
-        print("ERROR: server with ID %s has not been initialized." % (current_guild_id))
-        # quit() - eventually replace with on_guild_join(message.guild)
-        f = 0
+        # Validate that this server's configuration files already exists by validating that "f" != -1, which is a hardcoded error state for a server ID that's not in record
+        if f == -1:
+            print("ERROR: server with ID %s has not been initialized." % (current_guild_id))
+            # quit() - eventually replace with on_guild_join(message.guild)
+            f = 0
 
-    # Convert message to all lower-case for easier sorting (if set to do so in configuration file)
-    if(RESPONSE_FLAG_CASE_SENSITIVE[f] == "No"):
-        formatted_message = message.content.lower()
-        interim_ML_RF = MACHINE_LEARNING_RESPONSE_FLAG[f].lower()
-    else:
-        formatted_message = message.content
-        interim_ML_RF = MACHINE_LEARNING_RESPONSE_FLAG[f]
-    
-    # Ignore all bot messages
-    if not message.author.bot:
-        # Search for response flags
-        if formatted_message.startswith("!eb"):
-            await bot_command_processor(message, formatted_message)
-
-        # Check for response flag contents if they are the entirety of the text - if so, do not @ the poster
-        elif formatted_message == RESPONSE_FLAG[f].lower() and RESPONSE_FLAG_CASE_SENSITIVE[f] != "Yes":
-            # parse_gdoc()
-
-            # sanitize_file(initial_filename, filename)
-
-            line = find_line(STARBOARD_FILENAME[f])
-            await message.channel.send(line)
-
-        elif formatted_message == RESPONSE_FLAG[f] and RESPONSE_FLAG_CASE_SENSITIVE[f] == "Yes":
-            line = find_line(STARBOARD_FILENAME[f])
-            await message.channel.send(line)
-
-        # Check for response flag contents if they are anywhere within the content of the text - if so, @ the poster
-        elif formatted_message.find(RESPONSE_FLAG[f].lower()) != -1 and RESPONSE_FLAG_MATCH_EXACT_CASE[f] != "Yes":
-            # Assign spoken username to variable
-            user = message.author
-
-            line = find_line(STARBOARD_FILENAME[f])
-            await message.channel.send('{0.author.mention} '.format(message) + line)
-        
-        # Generate a machine learning response based on the starboard file
-        elif formatted_message == interim_ML_RF:
-            machine_learning = open(STARBOARD_FILENAME[f], encoding='utf8').read()
-            machine_learning_wordsplit = machine_learning.split()
-
-            pairs = make_pairs(machine_learning_wordsplit)
-
-            word_dict = {}
-
-            for word_1, word_2 in pairs:
-                if word_1 in word_dict.keys():
-                    word_dict[word_1].append(word_2)
-                else:
-                    word_dict[word_1] = [word_2]
-                    
-            first_word = np.random.choice(machine_learning_wordsplit)
-            chain = [first_word]
-            n_words = random.randint(30,50)
-
-            for i in range(n_words):
-                chain.append(np.random.choice(word_dict[chain[-1]]))
-
-            await message.channel.send(' '.join(chain))
-        
+        # Convert message to all lower-case for easier sorting (if set to do so in configuration file)
+        if(RESPONSE_FLAG_CASE_SENSITIVE[f] == "No"):
+            formatted_message = message.content.lower()
+            interim_ML_RF = MACHINE_LEARNING_RESPONSE_FLAG[f].lower()
         else:
-            with open(HOTWORDS_FILENAME[f], "r") as hotwords_file:
-                # Read in hotwords_file CSV
-                hotwords_read = csv.reader(hotwords_file, delimiter = HOTWORDS_DELIMITER[f])
+            formatted_message = message.content
+            interim_ML_RF = MACHINE_LEARNING_RESPONSE_FLAG[f]
+        
+        # Ignore all bot messages
+        if not message.author.bot:
+            # Search for response flags
+            if formatted_message.startswith("!eb"):
+                await bot_command_processor(message, formatted_message)
 
-                # Check each row in the CSV for the trigger word (in any format)
-                for row_split in hotwords_read:
-                    # row_split = row[0].split(HOTWORDS_DELIMITER)
-                    if formatted_message.find(row_split[0]) != -1:
-                        # If the word is found, check to see if the bot should @ the user or not
-                        if row_split[2] == "Yes" or row_split[2] == "yes":
-                            await message.channel.send('{0.author.mention} '.format(message) + row_split[1])
-                        else:
-                            await message.channel.send(row_split[1])
+            # Check for response flag contents if they are the entirety of the text - if so, do not @ the poster
+            elif formatted_message == RESPONSE_FLAG[f].lower() and RESPONSE_FLAG_CASE_SENSITIVE[f] != "Yes":
+                # parse_gdoc()
+
+                # sanitize_file(initial_filename, filename)
+
+                line = find_line(STARBOARD_FILENAME[f])
+                await message.channel.send(line)
+
+            elif formatted_message == RESPONSE_FLAG[f] and RESPONSE_FLAG_CASE_SENSITIVE[f] == "Yes":
+                line = find_line(STARBOARD_FILENAME[f])
+                await message.channel.send(line)
+
+            # Check for response flag contents if they are anywhere within the content of the text - if so, @ the poster
+            elif formatted_message.find(RESPONSE_FLAG[f].lower()) != -1 and RESPONSE_FLAG_MATCH_EXACT_CASE[f] != "Yes":
+                # Assign spoken username to variable
+                user = message.author
+
+                line = find_line(STARBOARD_FILENAME[f])
+                await message.channel.send('{0.author.mention} '.format(message) + line)
+            
+            # Generate a machine learning response based on the starboard file
+            elif formatted_message == interim_ML_RF:
+                machine_learning = open(STARBOARD_FILENAME[f], encoding='utf8').read()
+                machine_learning_wordsplit = machine_learning.split()
+
+                pairs = make_pairs(machine_learning_wordsplit)
+
+                word_dict = {}
+
+                for word_1, word_2 in pairs:
+                    if word_1 in word_dict.keys():
+                        word_dict[word_1].append(word_2)
+                    else:
+                        word_dict[word_1] = [word_2]
                         
-                        break
+                first_word = np.random.choice(machine_learning_wordsplit)
+                chain = [first_word]
+                n_words = random.randint(30,50)
 
-    # Check to see if @Sprinto was the tweeter          
-    if message.author.id == int("421646775749967872"):
-        # Check message to see if it is an end-of-sprint message
-        if message.content.find("🏆 **CONGRATS EVERYONE**") != -1:
-            # Process sprint values and add to total counter
-            status, response = sprint_bot_word_count_processor(message.content, SPRINT_BOT_COUNTER[f], current_guild_id)
-            # If there were no problems, also print out the current leaderboard
-            if status == 0 and (SPRINT_BOT_AUTOTRIGGER[f] == "Yes" or SPRINT_BOT_AUTOTRIGGER[f] == "yes"):
-                await sprint_leaderboard(SPRINT_BOT_COUNTER[f], int(message.channel.id), 1)
-                # If NaNo is enabled, then also output a NaNo embed
-                if(NANOWRIMO_MODE_ENABLED[f] == "Yes" or NANOWRIMO_MODE_ENABLED[f] == "Yes"):
-                    tuples = nanowrimo.nano_leaderboard(SPRINT_BOT_COUNTER[f])
-                    status, output_message = nanowrimo.nano_leaderboard_postprocessing(tuples, client)
+                for i in range(n_words):
+                    chain.append(np.random.choice(word_dict[chain[-1]]))
 
-                    embed = discord.Embed(title = "⚡ EndoBot @Sprinto Assistant ⚡", color=0x0077ff)
-                    embed.add_field(name = "NaNoWriMo Word Count Totals", inline = False, value = output_message)
-                    embed.set_footer(text = "`!eb nanowrimo enroll [wordcount]` (without brackets) to join!")
+                await message.channel.send(' '.join(chain))
+            
+            else:
+                with open(HOTWORDS_FILENAME[f], "r") as hotwords_file:
+                    # Read in hotwords_file CSV
+                    hotwords_read = csv.reader(hotwords_file, delimiter = HOTWORDS_DELIMITER[f])
 
-                    # Print to Discord
-                    await message.channel.send(embed = embed)
+                    # Check each row in the CSV for the trigger word (in any format)
+                    for row_split in hotwords_read:
+                        # row_split = row[0].split(HOTWORDS_DELIMITER)
+                        if formatted_message.find(row_split[0]) != -1:
+                            # If the word is found, check to see if the bot should @ the user or not
+                            if row_split[2] == "Yes" or row_split[2] == "yes":
+                                await message.channel.send('{0.author.mention} '.format(message) + row_split[1])
+                            else:
+                                await message.channel.send(row_split[1])
+                            
+                            break
+
+        # Check to see if @Sprinto was the tweeter          
+        if message.author.id == int("421646775749967872"):
+            # Check message to see if it is an end-of-sprint message
+            if message.content.find("🏆 **CONGRATS EVERYONE**") != -1:
+                # Process sprint values and add to total counter
+                status, response = sprint_bot_word_count_processor(message.content, SPRINT_BOT_COUNTER[f], current_guild_id)
+                # If there were no problems, also print out the current leaderboard
+                if status == 0 and (SPRINT_BOT_AUTOTRIGGER[f] == "Yes" or SPRINT_BOT_AUTOTRIGGER[f] == "yes"):
+                    print("[WORD SPRINT PROCESSOR] Sprint results processed.")
+                    await sprint_leaderboard(SPRINT_BOT_COUNTER[f], int(message.channel.id), 1, current_guild_id)
+                    # If NaNo is enabled, then also output a NaNo embed
+                    if(NANOWRIMO_MODE_ENABLED[f] == "Yes" or NANOWRIMO_MODE_ENABLED[f] == "Yes"):
+                        tuples = nanowrimo.nano_leaderboard(SPRINT_BOT_COUNTER[f])
+                        status, output_message = nanowrimo.nano_leaderboard_postprocessing(tuples, client)
+
+                        embed = discord.Embed(title = "⚡ EndoBot @Sprinto Assistant ⚡", color=0x0077ff)
+                        embed.add_field(name = "NaNoWriMo Word Count Totals", inline = False, value = output_message)
+                        embed.set_footer(text = "`!eb nanowrimo enroll [wordcount]` (without brackets) to join!")
+
+                        # Print to Discord
+                        await message.channel.send(embed = embed)
                 
 # Starboard Emoji Reaction Parser  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 @client.event
@@ -2297,11 +2414,23 @@ async def on_raw_reaction_add(payload):
                         output_message = "%s\n" % (message.content)
                         sinbin.write(output_message)
 
-# Post Scheduler - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# # Post Scheduler - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# async def post_scheduler(output_channel, current_guild_id):
+#     while True:
+#         if REBOOT_SCHEDULER_FLAG == 0:
+#             f = find_guild_position_number(current_guild_id)
+#             if GLOBAL_CLOCK == SPELLING_BEE_POST_TIME[f]:
+#                 interim_string = "[SCHEDULER] SUCCESS - server %s printed the daily message as expected." % str(current_guild_id)
+#                 print(interim_string)
+#                 # await morning_messages(output_channel, current_guild_id)
+#         else:
+#             break
+    
 @tasks.loop(hours=24)
 async def called_once_a_day(output_channel, current_guild_id):
     await client.wait_until_ready()
-    await morning_messages(output_channel, current_guild_id)
+    print("Posting a scheduled post!")
+    await morning_messages(output_channel, current_guild_id, 0)
 
 async def background_task(force_flag, output_channel, current_guild_id):
     DELAY = 15
@@ -2319,7 +2448,7 @@ async def background_task(force_flag, output_channel, current_guild_id):
         DAILY_MESSAGE_SCHEDULER_CURRENT_STATE[f] == 1
 
         # Run in a continuous loop
-        while True:
+        while REBOOT_SCHEDULER_FLAG == 0:
             # Obtain the current time
             now = datetime.datetime.utcnow()
 
@@ -2337,7 +2466,7 @@ async def background_task(force_flag, output_channel, current_guild_id):
                 # Tell the bot to wait that many seconds
                 await asyncio.sleep(seconds_until_target)
 
-            await called_once_a_day(output_channel, current_guild_id) 
+            await called_once_a_day(output_channel, current_guild_id)
 
             if force_flag == 1:
                 break
@@ -2351,6 +2480,7 @@ async def background_task(force_flag, output_channel, current_guild_id):
     else:
         interim_string = "[%s] SCHEDULER: the scheduler is already running. Duplicate schedule removed." % (client.get_guild(int(current_guild_id)))
         print(interim_string)
+    
 
 # INIT - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 if __name__ == "__main__":
@@ -2359,6 +2489,10 @@ if __name__ == "__main__":
 
     # Initialize scheduler
     set_scheduler(0)
+    set_scheduler_reboot_flag(0)
+
+    # Begin Global Clock
+    # global_clock()
 
     # Begin Bot
     client.run(TOKEN)

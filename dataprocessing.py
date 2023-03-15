@@ -1,5 +1,7 @@
 from os.path import exists
 import csv
+import matplotlib.pyplot as plt # python3 -m pip install -U matplotlib
+import datetime
 
 # Sprint Stats TODO:
 #       - most sprints in a day
@@ -79,3 +81,38 @@ def read_user_file(folder_name, user_id):
         return 0, temp_file
     else:
         return -1, temp_file
+
+
+def test_graph(folder_name, server_id, user_id, output_graph_filename):
+    # Build user's individually stored data file path
+    csv_filename = str(folder_name) + "/" + str(server_id) + "/User_Sprint_Totals/" + str(user_id) + ".csv"
+
+    # create empty lists to store data 
+    data = []
+
+    if exists(csv_filename):
+        # open CSV file and store data in lists 
+        with open(csv_filename) as csvfile:
+            reader = csv.reader(csvfile)
+            for row in reader:
+                data.append(row) 
+
+        dates = [datetime.datetime.strptime(row[0], '%Y-%m-%d').date() for row in data]
+        word_counts = [int(row[1]) for row in data]
+
+        start_date, end_date = min(dates), max(dates)
+
+        # create scatter plot of data 
+        plt.figure(figsize=(10,10))
+        plt.scatter(dates, word_counts)
+        plt.xlabel("Sprint Date")
+        plt.xticks(rotation=90)
+        plt.xlim(start_date, end_date)
+        plt.ylabel("Word Count")
+
+        # save image of graph 
+        plt.savefig(output_graph_filename)
+
+        return output_graph_filename
+    else:
+        return -1
