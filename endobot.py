@@ -550,7 +550,7 @@ def add_hotword(hotwords_filename, hotword, response, message_sender, current_gu
     output_message_to_CSV = ""
 
     # Make sure the hotword isn't already used in the file name before continuing
-    if check_hotword(hotwords_filename, hotword) == 0:
+    if check_hotword(hotwords_filename, hotword, current_guild_id) == 0:
         # Open file
         with open(hotwords_filename, "a") as loaded_file:
             # Prep the CSV file for Python parsing
@@ -1659,20 +1659,22 @@ async def list_configuration(message, current_guild_id):
     
     # Initialize configparser
     config = configparser.ConfigParser()
-    config.read(CONFIG_FILENAME[f])
 
-    output_message = ""
+    abs_path = os.path.abspath(CONFIG_FILENAME)
+    config.read(abs_path)
+
+    content = ""
 
     # Build up embed
-    embed = discord.Embed(title = "EndoBot - Current Configuration", description = "*For more information, visit the bot's [GitHub page](https://github.com/jadonmann/EndoBot).*", color=0x0077ff)
+    header = "⚙️ **ENDOBOT - CURRENT CONFIGURATION** ⚙️\n"
 
-    for (key, val) in config.items(current_guild_id):
-        output_message = output_message + "%s: `%s`\n" % (key, val)
+    for (key, val) in config.items(str(current_guild_id)):
+        content = content + "%s: `%s`\n" % (key, val)
 
-    embed.add_field(name = "\u200b", inline = False, value = output_message)
+    output_message = header + content
 
     channel = message.channel
-    await channel.send(embed = embed)
+    await channel.send(output_message)
 
 # morning_messages - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # Builds an embed with a morning digest, including the day's spelling bee, yesterday's sprint reports, and more
@@ -1880,7 +1882,7 @@ async def bot_command_processor(message, command_string):
                     status, response = await list_hotwords(HOTWORDS_FILENAME[f], message)
 
         elif command_array[1] == "leaderboard":
-            status, response = await leaderboard(STARBOARD_RECEIPTS_FILENAME[f], message)
+            status, response = await leaderboard(STARBOARD_RECEIPTS_FILENAME[f], message, current_guild_id)
 
         elif command_array[1] == "sprintstats":
             if number_of_elements > 2:
@@ -2330,7 +2332,7 @@ async def on_message(message):
                     # Check each row in the CSV for the trigger word (in any format)
                     for row_split in hotwords_read:
                         # row_split = row[0].split(HOTWORDS_DELIMITER)
-                        if formatted_message.find(row_split[0]) != -1:
+                        if formatted_message.find(row_split[0].lower()) != -1:
                             # If the word is found, check to see if the bot should @ the user or not
                             if row_split[2] == "Yes" or row_split[2] == "yes":
                                 await message.channel.send('{0.author.mention} '.format(message) + row_split[1])
