@@ -76,17 +76,20 @@ LOADED_EXTERNAL_MEDIA_CONFIG_FILENAME = list()
 HOTWORDS_FILENAME = list()
 HOTWORDS_DELIMITER = list()
 MACHINE_LEARNING_RESPONSE_FLAG = list()
+DAILY_ANNOUNCEMENTS_OUTPUT_CHANNEL_ID = list()
+DAILY_ANNOUNCEMENTS_AUTO_POST = list()
+DAILY_ANNOUNCEMENTS_POST_TIME = list()
+DAILY_ANNOUNCEMENTS_INCLUDE_SPRINTS = list()
+DAILY_ANNOUNCEMENTS_SKIP_ZERO_SPRINT_DAYS = list()
+DAILY_ANNOUNCEMENTS_INCLUDE_NANO_STATS = list()
+DAILY_ANNOUNCEMENTS_INCLUDE_PUZZLES = list()
 SPELLING_BEE_URL = list()
-SPELLING_BEE_OUTPUT_CHANNEL_ID = list()
-SPELLING_BEE_AUTO_POST = list()
-SPELLING_BEE_POST_TIME = list()
 SPELLING_BEE_HTML = list()
 SPELLING_BEE_CSS = list()
 SPELLING_BEE_PNG = list()
 SPRINT_BOT_COUNTER = list()
 SPRINT_BOT_INDIVIDUAL_COUNTER_FOLDER = list()
 SPRINT_BOT_AUTOTRIGGER = list()
-SPRINT_BOT_SKIP_ZERO_DAYS = list()
 SPRINT_BOT_FORCE_ALL_SPRINT_HISTORY = list()
 NANOWRIMO_MODE_ENABLED = list()
 SCHEDULER_FILENAME = list()
@@ -162,6 +165,7 @@ def global_clock():
 def initialize_bot_globals(config_filename, servername):
     global GUILD_ID
     global SYSTEM_CHANNEL
+
     global STARBOARD_FUNCTION_ENABLE
     global STARBOARD_FILENAME
     global STARBOARD_RECEIPTS_FILENAME
@@ -175,17 +179,20 @@ def initialize_bot_globals(config_filename, servername):
     global HOTWORDS_FILENAME
     global HOTWORDS_DELIMITER
     global MACHINE_LEARNING_RESPONSE_FLAG
+    global DAILY_ANNOUNCEMENTS_OUTPUT_CHANNEL_ID
+    global DAILY_ANNOUNCEMENTS_AUTO_POST
+    global DAILY_ANNOUNCEMENTS_POST_TIME
+    global DAILY_ANNOUNCEMENTS_INCLUDE_SPRINTS
+    global DAILY_ANNOUNCEMENTS_SKIP_ZERO_SPRINT_DAYS
+    global DAILY_ANNOUNCEMENTS_INCLUDE_NANO_STATS
+    global DAILY_ANNOUNCEMENTS_INCLUDE_PUZZLES
     global SPELLING_BEE_URL
-    global SPELLING_BEE_OUTPUT_CHANNEL_ID
-    global SPELLING_BEE_AUTO_POST
-    global SPELLING_BEE_POST_TIME
     global SPELLING_BEE_HTML
     global SPELLING_BEE_CSS
     global SPELLING_BEE_PNG
     global SPRINT_BOT_COUNTER
     global SPRINT_BOT_INDIVIDUAL_COUNTER_FOLDER
     global SPRINT_BOT_AUTOTRIGGER
-    global SPRINT_BOT_SKIP_ZERO_DAYS
     global SPRINT_BOT_FORCE_ALL_SPRINT_HISTORY
     global NANOWRIMO_MODE_ENABLED
     global SCHEDULER_FILENAME
@@ -271,79 +278,94 @@ def initialize_bot_globals(config_filename, servername):
         return -14
     MACHINE_LEARNING_RESPONSE_FLAG.append(current_value)
 
-    exists, current_value = read_ini_file(config_filename, servername, "spelling_bee_url")
+    exists, current_value = read_ini_file(config_filename, servername, "daily_announcements_output_channel_id")
     if exists == -1:
         return -15
-    SPELLING_BEE_URL.append(current_value)
+    DAILY_ANNOUNCEMENTS_OUTPUT_CHANNEL_ID.append(int(current_value))
 
-    exists, current_value = read_ini_file(config_filename, servername, "spelling_bee_output_channel_id")
+    exists, current_value = read_ini_file(config_filename, servername, "daily_announcements_auto_post")
     if exists == -1:
         return -16
-    SPELLING_BEE_OUTPUT_CHANNEL_ID.append(int(current_value))
+    DAILY_ANNOUNCEMENTS_AUTO_POST.append(current_value)
 
-    exists, current_value = read_ini_file(config_filename, servername, "spelling_bee_auto_post")
+    exists, current_value = read_ini_file(config_filename, servername, "daily_announcements_post_time")
     if exists == -1:
         return -17
-    SPELLING_BEE_AUTO_POST.append(current_value)
+    DAILY_ANNOUNCEMENTS_POST_TIME.append(current_value)
 
-    exists, current_value = read_ini_file(config_filename, servername, "spelling_bee_post_time")
+    exists, current_value = read_ini_file(config_filename, servername, "daily_announcements_include_sprints")
     if exists == -1:
         return -18
-    SPELLING_BEE_POST_TIME.append(current_value)
+    DAILY_ANNOUNCEMENTS_INCLUDE_SPRINTS.append(current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "daily_announcements_skip_sprint_zero_days")
+    if exists == -1:
+        return -19
+    DAILY_ANNOUNCEMENTS_SKIP_ZERO_SPRINT_DAYS.append(current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "daily_announcements_include_nano_stats")
+    if exists == -1:
+        return -14
+    DAILY_ANNOUNCEMENTS_INCLUDE_NANO_STATS.append(current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "daily_announcements_include_puzzles")
+    if exists == -1:
+        return -20
+    DAILY_ANNOUNCEMENTS_INCLUDE_PUZZLES.append(current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "spelling_bee_url")
+    if exists == -1:
+        return -21
+    SPELLING_BEE_URL.append(current_value)
 
     exists, current_value = read_ini_file(config_filename, servername, "spelling_bee_html")
     if exists == -1:
-        return -19
+        return -22
     SPELLING_BEE_HTML.append(current_value)
 
     exists, current_value = read_ini_file(config_filename, servername, "spelling_bee_css")
     if exists == -1:
-        return -20
+        return -23
     SPELLING_BEE_CSS.append(current_value)
 
     exists, current_value = read_ini_file(config_filename, servername, "spelling_bee_png")
     if exists == -1:
-        return -21
+        return -24
     SPELLING_BEE_PNG.append(current_value)
 
     exists, current_value = read_ini_file(config_filename, servername, "sprint_bot_counter")
     if exists == -1:
-        return -22
+        return -25
     SPRINT_BOT_COUNTER.append("Servers/" + str(servername) + "/" + current_value)
 
     exists, current_value = read_ini_file(config_filename, servername, "sprint_bot_individual_counter_folder")
     if exists == -1:
-        return -23
+        return -26
     SPRINT_BOT_INDIVIDUAL_COUNTER_FOLDER.append("Servers/" + str(servername) + "/" + current_value)
 
     exists, current_value = read_ini_file(config_filename, servername, "sprint_bot_autotrigger")
     if exists == -1:
-        return -24
+        return -27
     SPRINT_BOT_AUTOTRIGGER.append(current_value)
-
-    exists, current_value = read_ini_file(config_filename, servername, "sprint_bot_skip_zero_days")
-    if exists == -1:
-        return -28
-    SPRINT_BOT_SKIP_ZERO_DAYS.append(current_value)
 
     exists, current_value = read_ini_file(config_filename, servername, "sprint_bot_force_all_sprint_history")
     if exists == -1:
-        return -29
+        return -28
     SPRINT_BOT_FORCE_ALL_SPRINT_HISTORY.append(current_value)
 
     exists, current_value = read_ini_file(config_filename, servername, "nanowrimo_mode_enabled")
     if exists == -1:
-        return -25
+        return -29
     NANOWRIMO_MODE_ENABLED.append(current_value)
 
     exists, current_value = read_ini_file(config_filename, servername, "scheduler_filename")
     if exists == -1:
-        return -26
+        return -30
     SCHEDULER_FILENAME.append("Servers/" + str(servername) + "/" + current_value)
 
     exists, current_value = read_ini_file(config_filename, servername, "command_list_filename")
     if exists == -1:
-        return -27
+        return -31
     COMMAND_LIST_FILENAME.append(current_value)
     
     return 0
@@ -370,17 +392,20 @@ def clear_global_variables():
     HOTWORDS_FILENAME.clear()
     HOTWORDS_DELIMITER.clear()
     MACHINE_LEARNING_RESPONSE_FLAG.clear()
+    DAILY_ANNOUNCEMENTS_OUTPUT_CHANNEL_ID.clear()
+    DAILY_ANNOUNCEMENTS_AUTO_POST.clear()
+    DAILY_ANNOUNCEMENTS_POST_TIME.clear()
+    DAILY_ANNOUNCEMENTS_INCLUDE_SPRINTS.clear()
+    DAILY_ANNOUNCEMENTS_SKIP_ZERO_SPRINT_DAYS.clear()
+    DAILY_ANNOUNCEMENTS_INCLUDE_NANO_STATS.clear()
+    DAILY_ANNOUNCEMENTS_INCLUDE_PUZZLES.clear()
     SPELLING_BEE_URL.clear()
-    SPELLING_BEE_OUTPUT_CHANNEL_ID.clear()
-    SPELLING_BEE_AUTO_POST.clear()
-    SPELLING_BEE_POST_TIME.clear()
     SPELLING_BEE_HTML.clear()
     SPELLING_BEE_CSS.clear()
     SPELLING_BEE_PNG.clear()
     SPRINT_BOT_COUNTER.clear()
     SPRINT_BOT_INDIVIDUAL_COUNTER_FOLDER.clear()
     SPRINT_BOT_AUTOTRIGGER.clear()
-    SPRINT_BOT_SKIP_ZERO_DAYS.clear()
     SPRINT_BOT_FORCE_ALL_SPRINT_HISTORY.clear()
     NANOWRIMO_MODE_ENABLED.clear()
     SCHEDULER_FILENAME.clear()
@@ -829,6 +854,12 @@ def retrieve_website_html(url):
     session = requests.Session()
     session.headers["User-Agent"] = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/44.0.2403.157 Safari/537.36"
 
+    r = session.get(url)
+    r.encoding = r.apparent_encoding
+    html = str(r.text)
+
+    return html
+
     html_interim = session.get(url).content
     html = str(html_interim)
     
@@ -948,11 +979,18 @@ def remove_html_artifacts(chapter_content, i):
     chapter_content[i] = chapter_content[i].replace("*n    <span>", "*")
     chapter_content[i] = chapter_content[i].replace("n  *", "*")
     chapter_content[i] = chapter_content[i].replace("</p></div>n        ", "")
+    chapter_content[i] = chapter_content[i].replace(" align=\"JUSTIFY\"", "")
     chapter_content[i] = chapter_content[i].replace(" align=\"CENTER\"", "")
     chapter_content[i] = chapter_content[i].replace(" align=\"LEFT\"", "")
     chapter_content[i] = chapter_content[i].replace(" align=\"RIGHT\"", "")
     chapter_content[i] = chapter_content[i].replace("</p>  </div>", "")
     chapter_content[i] = chapter_content[i].replace("</br> ", "</p><p>") 
+    chapter_content[i] = chapter_content[i].replace("<br/>", "</p><p>") 
+    chapter_content[i] = chapter_content[i].replace(" align=\"justify\"", "")
+    chapter_content[i] = chapter_content[i].replace(" align=\"center\"", "")
+    chapter_content[i] = chapter_content[i].replace(" align=\"left\"", "")
+    chapter_content[i] = chapter_content[i].replace(" align=\"right\"", "")
+    chapter_content[i] = chapter_content[i].replace("</p><p>n", "</p><p>")
 
     return chapter_content
 
@@ -1485,7 +1523,7 @@ async def sprint_leaderboard(sprint_counter_filename, channel_id, print_message,
             return 0, None
         # Otherwise, prepare a report for the morning messages
         else:
-            second_output_message = "Yesterday, %d new words were written. Here are the totals:\n\n%s" % (total_day_count_across_all_users, output_message)
+            second_output_message = "Yesterday, %d new words were written. Here are the totals:\n%s" % (total_day_count_across_all_users, output_message)
             if total_day_count_across_all_users == 0:
                 return -20, second_output_message
             else:
@@ -1565,9 +1603,9 @@ def spelling_bee_builder(current_guild_id):
     output_string_interim = ""
     count = 1
     for i in answers:
-        output_string_interim = output_string_interim + "(" + str(count) + "): ||" + i + "||\n"
+        output_string_interim = output_string_interim + "`" + str(count) + "`. ||" + i + "||\n"
         count += 1
-    spelling_bee_solutions = "```cs\n# Today's Spelling Bee Solutions #```Remember that all letters must be used at least once in the day's winning word(s) - that means letters can be repeated as many times as necessary!\n\n" + output_string_interim
+    spelling_bee_solutions = "Today's Spelling Bee Solutions: \n" + output_string_interim
     return spelling_bee_solutions
 
 # spelling_bee_printer - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
@@ -1676,93 +1714,98 @@ async def list_configuration(message, current_guild_id):
     channel = message.channel
     await channel.send(output_message)
 
-# morning_messages - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# daily_messages - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # Builds an embed with a morning digest, including the day's spelling bee, yesterday's sprint reports, and more
 # INPUTS:
 #       - (int) channel_id: the channel that this message will be posted in
-#       - (int) reset_flag: 0 if the daily sprint counter(s) are to be reset, 1 if not
 #       - (int) current_guild_id: the ID for the current guild. Used for global variable parsing.
+#       - (int) force_flag: flag that bypasses the daily sprint counter reset function (allows to call the daily announcements post off-schedule)
 # OUTPUTS:
 #       - N/A
 
-async def morning_messages(channel_id, current_guild_id, force_flag):
-    today = datetime.datetime.now()
-
-    words_written = False
-
+async def daily_messages(channel_id, current_guild_id, force_flag):
     # Find current guild position within stored global variables
     f = find_guild_position_number(current_guild_id)
+    server_name = client.get_guild(int(current_guild_id))
 
+    # Get channel ID
+    channel = client.get_channel(int(channel_id))
+
+    today = datetime.datetime.now()
     url = SPELLING_BEE_URL[f]
+    words_written = False
 
-    # Create embed and title it with the server's ASCII name
-    title_builder = "%s Morning Announcements" % (client.get_guild(int(current_guild_id)))
-    embed = discord.Embed(title = title_builder, description = "*For more information, visit the bot's [GitHub page](https://github.com/jadonmann/EndoBot).*", color=0x0077ff)
-    
-    # If a NaNoWriMo event is going on, include the current/final word count tallies in the morning announcements
-    if NANOWRIMO_MODE_ENABLED[f] == "Yes":
-        if today.day == 1:
-            tuples = nanowrimo.nano_leaderboard(SPRINT_BOT_COUNTER[f])
-            status, output_message = nanowrimo.nano_final_leaderboard_postprocessing(tuples, client)
-            output_message = "```cs\n# Final NaNoWriMo Results #```" + output_message
-            embed.add_field(name = "\u200b", inline = False, value = output_message)
-        else:
-            tuples = nanowrimo.nano_leaderboard(SPRINT_BOT_COUNTER[f])
-            status, output_message = nanowrimo.nano_leaderboard_postprocessing(tuples, client)
-            output_message = "```cs\n# Current NaNoWriMo Standings #```" + output_message
-            embed.add_field(name = "\u200b", inline = False, value = output_message)
-
-    # Calculate and print the sprint leaderboard
+    # Process current sprint totals
     status, sprint_output = await sprint_leaderboard(SPRINT_BOT_COUNTER[f], int(channel_id), 0, current_guild_id)
-    output_message = "```cs\n# Yesterday's Sprint Totals #```%s" % sprint_output
-    embed.add_field(name = "\u200b", inline = False, value = output_message)
 
+    # Checks to see if words were written in the previous day, and if the bot is allowed to post when that's the case
     if status == -20:
         # No words were written in the previous day
         words_written = False
     else:
         words_written = True
 
+    # Check to see if the server has anything to post, or if morning announcements have been disabled for the server
+    if DAILY_ANNOUNCEMENTS_AUTO_POST[f] == "No" or (DAILY_ANNOUNCEMENTS_INCLUDE_SPRINTS[f] == "No" and DAILY_ANNOUNCEMENTS_INCLUDE_NANO_STATS == "No" and DAILY_ANNOUNCEMENTS_INCLUDE_PUZZLES[f] == "No") or (DAILY_ANNOUNCEMENTS_INCLUDE_SPRINTS[f] == "Yes" and (words_written == False and DAILY_ANNOUNCEMENTS_SKIP_ZERO_SPRINT_DAYS[f] == "No") and DAILY_ANNOUNCEMENTS_INCLUDE_NANO_STATS == "No" and DAILY_ANNOUNCEMENTS_INCLUDE_PUZZLES[f] == "No"):
+        return 0
+
+    # --> DAILY ANNOUNCEMENTS HEADER
+    output_message = " ☀️ **%s DAILY ANNOUNCEMENTS** ☀️ " % str(server_name).upper()
+
+    # Build the embed's footer string
+    today = datetime.date.today()
+    footer_string = " - Day of %s" % (today.strftime("%d %B %Y"))
+    output_message += footer_string
+
+    # Print to Discord
+    await channel.send(output_message)
+
+
+    # --> DAILY SPRINT TOTAL ANNOUNCEMENT
+    if DAILY_ANNOUNCEMENTS_INCLUDE_SPRINTS[f] == "Yes":
+        # If the server is configured not to post when there have been no sprints that day, then skip the morning messages
+        if words_written == True and DAILY_ANNOUNCEMENTS_SKIP_ZERO_SPRINT_DAYS[f] == "Yes":
+            # Print to Discord
+            output_message = " --> 📝 **Daily Word Sprint Totals**\n" + sprint_output
+            await channel.send(output_message)
+        elif words_written == False and DAILY_ANNOUNCEMENTS_SKIP_ZERO_SPRINT_DAYS[f] == "No":
+            # Print to Discord
+            output_message = " --> 📝 **Daily Word Sprint Totals**\n" + sprint_output
+            await channel.send(output_message)
+
+    # --> DAILY NANO STATS ANNOUNCEMENT
+    # If a NaNoWriMo event is going on and DAILY_ANNOUNCEMENTS_INCLUDE_NANO_STATS is true, include the current/final word count tallies in the morning announcements
+    if NANOWRIMO_MODE_ENABLED[f] == "Yes" and DAILY_ANNOUNCEMENTS_INCLUDE_NANO_STATS[f] == "Yes":
+        if today.day == 1:
+            tuples = nanowrimo.nano_leaderboard(SPRINT_BOT_COUNTER[f])
+            status, output_message_interim = nanowrimo.nano_final_leaderboard_postprocessing(tuples, client)
+            output_message = "--> 👑 **Final NaNoWriMo Results**" + output_message_interim
+        else:
+            tuples = nanowrimo.nano_leaderboard(SPRINT_BOT_COUNTER[f])
+            status, output_message_interim = nanowrimo.nano_leaderboard_postprocessing(tuples, client)
+            output_message = " --> 👑 **Current NaNoWriMo Standings**" + output_message_interim
+
+        # Print to Discord
+        await channel.send(output_message)
+
+    # --> DAILY PUZZLE ANNOUNCEMENT
+    if DAILY_ANNOUNCEMENTS_INCLUDE_PUZZLES[f] == "Yes":
+        puzzle_text = "Wordle: <https://www.nytimes.com/games/wordle>\nQuordle: <https://www.quordle.com>\nWeaver: <https://wordwormdormdork.com>\nSpelling Bee: <%s>\n\n" % url
+        output_message = " --> 🎲 **Today's Online Puzzles**\n" + puzzle_text
+
+        # Print details about the day's NYT Spelling Bee
+        spelling_bee_solutions = spelling_bee_builder(current_guild_id)
+        
+        output_message += spelling_bee_solutions
+
+        # Print to Discord
+        await channel.send(output_message, file = discord.File(SPELLING_BEE_PNG[f]))
+
     # If forced, do not reset the daily counter (allows for morning messages at any time of the day)
     if force_flag == 0:
         # Reset the daily sprint counter for each user
         status = await sprint_counter_daily_cleanup(SPRINT_BOT_COUNTER[f], current_guild_id)
-
-    if SPELLING_BEE_AUTO_POST[f] == "Yes":
-        # Print the link to the day's Wordle
-        output_message = "```cs\n# Today's Online Puzzles #```The Wordle of the Day can be found [here!](https://www.nytimes.com/games/wordle/index.html)\nThe Quordle of the Day can be found [here!](https://www.quordle.com/#/)\nThe Weaver of the Day can be found [here!](https://wordwormdormdork.com/)"
-        embed.add_field(name = "\u200b", inline = False, value = output_message)
-
-        # Print details about the day's NYT Spelling Bee
-        spelling_bee_solutions = spelling_bee_builder(current_guild_id)
-        spelling_bee_solutions += "\n[Spelling Bee source](%s)" % url
-        embed.add_field(name = "\u200b", inline = False, value = spelling_bee_solutions)
-
-        # Prepare the locally-hosted image generated by spelling_bee_builder for use in Discord embeds
-        file = discord.File(SPELLING_BEE_PNG[f])
-        image_string = "attachment://" + SPELLING_BEE_PNG[f]
-        embed.set_image(url = image_string)
     
-    # Build the embed's footer string
-    today = datetime.date.today()
-    footer_string = "Day of %s" % (today.strftime("%d %B %Y"))
-    embed.set_footer(text = footer_string)
-
-    # If the server is configured not to post when there have been no sprints that day, then skip the morning messages
-    if words_written == True and SPRINT_BOT_SKIP_ZERO_DAYS[f] == "Yes":
-        # Print embed to Discord
-        channel = client.get_channel(int(channel_id))
-        if SPELLING_BEE_AUTO_POST[f] == "Yes":
-            await channel.send(file = file, embed = embed)
-        else:
-            await channel.send(embed = embed)
-    elif words_written == False and SPRINT_BOT_SKIP_ZERO_DAYS[f] == "No":
-        # Print embed to Discord
-        channel = client.get_channel(int(channel_id))
-        if SPELLING_BEE_AUTO_POST[f] == "Yes":
-            await channel.send(file = file, embed = embed)
-        else:
-            await channel.send(embed = embed)
 
 # bot_command_processor  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # A function that specifically processes through !eb prefixed messages and sorts out respondable prompts from the following line items
@@ -1817,8 +1860,6 @@ async def bot_command_processor(message, command_string):
 
     if message.author.id == int("330900130997862400"):
         mod = True
-    else:
-        mod = False
 
     # Find server ID
     current_guild_id = int(message.guild.id)
@@ -1873,7 +1914,7 @@ async def bot_command_processor(message, command_string):
                             new_string_partiallyprocessed = message.content.split(" [")
                             new_string = new_string_partiallyprocessed[1].split("]") # new_string[0] is the phrase to be deleted
 
-                            status, response = remove_hotword(HOTWORDS_FILENAME[f], new_string[0])
+                            status, response = remove_hotword(HOTWORDS_FILENAME[f], new_string[0], current_guild_id)
                             await channel.send(response)
                     else:
                         status = -1
@@ -1947,9 +1988,12 @@ async def bot_command_processor(message, command_string):
 
         elif command_array[1] == "randomizer":
             if number_of_elements > 2:
-                status = 0
-                chapter_content = process_ao3_html(command_array[2])
-                await find_ao3_line(chapter_content, message, command_array[2])
+                try:
+                    status = 0
+                    chapter_content = process_ao3_html(command_array[2])
+                    await find_ao3_line(chapter_content, message, command_array[2])
+                except:
+                    await channel.send("Sorry, an error occurred! (This feature is still in development!)")
             else:
                 status = -1
                 response = "You're missing a URL!"
@@ -2078,7 +2122,7 @@ async def bot_command_processor(message, command_string):
         elif command_array[1] == "admin":
             if command_array[2] == "forcemorningmessages":
                 if mod == True:
-                    await morning_messages(int(channel.id), current_guild_id, 1)
+                    await daily_messages(int(channel.id), current_guild_id, 1)
                 else:
                     status = -1
                     response = "Sorry, you lack the necessary permissions to use this command."
@@ -2106,6 +2150,9 @@ async def bot_command_processor(message, command_string):
         elif command_array[1] == "dev2":
             result = wordsprints.test_script(client, command_array[2])
             await channel.send(result)
+
+        elif command_array[1] == "dev3":
+            await daily_messages(int(message.channel.id), current_guild_id, 1)
                 
         else:
             status = -1
@@ -2203,7 +2250,7 @@ async def on_ready():
                 f = find_guild_position_number(current_id)
                 
                 if MESSAGE_SCHEDULER_INIT_FLAG == 0:
-                    client.loop.create_task(background_task(0, SPELLING_BEE_OUTPUT_CHANNEL_ID[f], current_id))
+                    client.loop.create_task(background_task(0, DAILY_ANNOUNCEMENTS_OUTPUT_CHANNEL_ID[f], current_id))
                 elif MESSAGE_SCHEDULER_INIT_FLAG == 1:
                     print("[SCHEDULER] The scheduler has already been initialized. Skipping re-initialization.")
 
@@ -2432,7 +2479,7 @@ async def on_raw_reaction_add(payload):
 async def called_once_a_day(output_channel, current_guild_id):
     await client.wait_until_ready()
     print("Posting a scheduled post!")
-    await morning_messages(output_channel, current_guild_id, 0)
+    await daily_messages(output_channel, current_guild_id, 0)
 
 async def background_task(force_flag, output_channel, current_guild_id):
     DELAY = 15
@@ -2441,7 +2488,7 @@ async def background_task(force_flag, output_channel, current_guild_id):
     f = find_guild_position_number(current_guild_id)
     
     # Build up the daily message time value from numbers acquired in the configuration.ini file
-    sb_status, sb_hour, sb_minute, sb_second = time_processor(SPELLING_BEE_POST_TIME[f])
+    sb_status, sb_hour, sb_minute, sb_second = time_processor(DAILY_ANNOUNCEMENTS_POST_TIME[f])
     if sb_status == 0:
         DAILY_MESSAGE_TIME = datetime.time(sb_hour, sb_minute, sb_second)      
 
