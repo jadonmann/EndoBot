@@ -2,12 +2,12 @@
 `!eb trigger delete [trigger phrase]`␝Yes␝Yes
 `!eb trigger list`␝No␝No
 `!eb leaderboard`␝No␝No
-`!eb sprintstats edit [+/-value] [Discord ID or @]`␝Yes␝No
+`!eb sprintstats edit [+/-value] [Discord ID]`␝Yes␝No
 `!eb sprintstats forceupdate`␝No␝Yes
-`!eb sprintstats leaderboard`␝No␝No
+`!eb sprintstats full`␝No␝No
+`!eb sprintstats today`␝No␝No
 `!eb help`␝No␝No
-`!eb fullhelp`␝No␝No
-`!eb randomizer [media name]`␝No␝No
+`!eb randomizer [media name or link]`␝No␝No
 `!eb config [configuration option] [value]`␝Yes␝Yes
 `!eb config list`␝No␝Yes
 `!eb reboot`␝No␝Yes
@@ -16,7 +16,11 @@
 `!eb nanowrimo withdraw`␝No␝No
 `!eb nanowrimo check`␝No␝No
 `!eb nanowrimo enable`␝No␝No
-`!eb nanowrimo disable`␝No␝Yes
+`!eb nanowrimo cancel`␝No␝Yes
+`!eb nanowrimo set [word count]`␝No␝No
+`!eb nanowrimo add [word count]`␝No␝No
+`!eb nanowrimo userset [word count] [Discord ID]`␝No␝Yes
+`!eb nanowrimo useradd [word count] [Discord ID]`␝No␝Yes
 `!eb nanowrimo leaderboard`␝No␝No
 `!eb admin forcemorningmessages`␝No␝Yes
 `!eb welcome`␝No␝No

@@ -14,11 +14,9 @@
 # IMPORTS AND GLOBAL VARIABLES ----------------------------------------------------------------------- #
 
 from __future__ import print_function
-from cgi import test
 from xmlrpc.server import CGIXMLRPCRequestHandler
 #from asyncio.windows_events import NULL
 from async_timeout import asyncio
-from cv2 import estimateChessboardSharpness, line
 from discord.ext import commands, tasks
 from discord.utils import get
 from oauth2client import client
@@ -28,6 +26,7 @@ import random
 import discord
 import numpy as np
 import datetime
+from datetime import timezone
 import csv
 import re
 import shutil
@@ -38,6 +37,7 @@ import requests
 import configparser
 from selenium import webdriver # pip install selenium
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager # pip install webdriver-manager
 
 import nanowrimo
@@ -46,7 +46,7 @@ import wordsprints
 
 # Enables ability to check member IDs within a server (used for Leaderboard functionality)
 # This requires a specific permission through Discord's API and will need to be renewed periodically
-intents = discord.Intents.default()
+intents = discord.Intents.all()
 intents.members = True
 
 client = discord.Client(intents=intents)
@@ -87,18 +87,19 @@ SPELLING_BEE_URL = list()
 SPELLING_BEE_HTML = list()
 SPELLING_BEE_CSS = list()
 SPELLING_BEE_PNG = list()
-SPRINT_BOT_COUNTER = list()
+SPRINT_BOT_COUNTER_FILENAME = list()
 SPRINT_BOT_INDIVIDUAL_COUNTER_FOLDER = list()
 SPRINT_BOT_AUTOTRIGGER = list()
 SPRINT_BOT_FORCE_ALL_SPRINT_HISTORY = list()
 NANOWRIMO_MODE_ENABLED = list()
+NANOWRIMO_FILENAME = list()
+NANOWRIMO_HISTORY_FOLDER = list()
 SCHEDULER_FILENAME = list()
 COMMAND_LIST_FILENAME = list()
+LOGS_ENABLED = list()
 
 # This variable tells the Bot if a server's scheduler is running or not
 DAILY_MESSAGE_SCHEDULER_CURRENT_STATE = list()
-
-REBOOT_SCHEDULER_FLAG = None
 
 # This variable tells the Bot whether or not it has run initial scheduler setup or not
 MESSAGE_SCHEDULER_INIT_FLAG = None
@@ -122,8 +123,8 @@ GLOBAL_CLOCK = None
 #       - (string) token: returns the token
 def load_bot_token(token_filename):
     with open(token_filename, "r") as loaded_file:
-        for line in loaded_file:
-            return line
+        for token in loaded_file:
+            return token
 
 # set_scheduler  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # Runs at first startup and sets the variable MESSAGE_SCHEDULER_INIT_FLAG as a global variable with integer value 0.
@@ -137,23 +138,6 @@ def load_bot_token(token_filename):
 def set_scheduler(value):
     global MESSAGE_SCHEDULER_INIT_FLAG
     MESSAGE_SCHEDULER_INIT_FLAG = value
-
-def set_scheduler_reboot_flag(value):
-    global REBOOT_SCHEDULER_FLAG
-    REBOOT_SCHEDULER_FLAG = value
-    
-def set_global_clock(value):
-    global GLOBAL_CLOCK
-    GLOBAL_CLOCK = value
-
-def global_clock():
-    threading.Timer(1, global_clock).start()
-
-    now = datetime.datetime.utcnow()
-
-    current_time = now.strftime("%H:%M:%S")
-    set_global_clock(current_time)
-    
     
 # initialize_bot_globals - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # Initializes the bot with configuration information read from an INI file and populates the global variable lists
@@ -190,13 +174,16 @@ def initialize_bot_globals(config_filename, servername):
     global SPELLING_BEE_HTML
     global SPELLING_BEE_CSS
     global SPELLING_BEE_PNG
-    global SPRINT_BOT_COUNTER
+    global SPRINT_BOT_COUNTER_FILENAME
     global SPRINT_BOT_INDIVIDUAL_COUNTER_FOLDER
     global SPRINT_BOT_AUTOTRIGGER
     global SPRINT_BOT_FORCE_ALL_SPRINT_HISTORY
     global NANOWRIMO_MODE_ENABLED
+    global NANOWRIMO_FILENAME
+    global NANOWRIMO_HISTORY_FOLDER
     global SCHEDULER_FILENAME
     global COMMAND_LIST_FILENAME
+    global LOGS_ENABLED
 
     global DAILY_MESSAGE_SCHEDULER_CURRENT_STATE
     
@@ -333,10 +320,10 @@ def initialize_bot_globals(config_filename, servername):
         return -24
     SPELLING_BEE_PNG.append(current_value)
 
-    exists, current_value = read_ini_file(config_filename, servername, "sprint_bot_counter")
+    exists, current_value = read_ini_file(config_filename, servername, "sprint_bot_counter_filename")
     if exists == -1:
         return -25
-    SPRINT_BOT_COUNTER.append("Servers/" + str(servername) + "/" + current_value)
+    SPRINT_BOT_COUNTER_FILENAME.append("Servers/" + str(servername) + "/" + current_value)
 
     exists, current_value = read_ini_file(config_filename, servername, "sprint_bot_individual_counter_folder")
     if exists == -1:
@@ -358,15 +345,30 @@ def initialize_bot_globals(config_filename, servername):
         return -29
     NANOWRIMO_MODE_ENABLED.append(current_value)
 
-    exists, current_value = read_ini_file(config_filename, servername, "scheduler_filename")
+    exists, current_value = read_ini_file(config_filename, servername, "nanowrimo_filename")
     if exists == -1:
         return -30
+    NANOWRIMO_FILENAME.append("Servers/" + str(servername) + "/" + current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "nanowrimo_history_folder")
+    if exists == -1:
+        return -30
+    NANOWRIMO_HISTORY_FOLDER.append("Servers/" + str(servername) + "/" + current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "scheduler_filename")
+    if exists == -1:
+        return -31
     SCHEDULER_FILENAME.append("Servers/" + str(servername) + "/" + current_value)
 
     exists, current_value = read_ini_file(config_filename, servername, "command_list_filename")
     if exists == -1:
-        return -31
+        return -32
     COMMAND_LIST_FILENAME.append(current_value)
+
+    exists, current_value = read_ini_file(config_filename, servername, "logs_enabled")
+    if exists == -1:
+        return -33
+    LOGS_ENABLED.append(current_value)
     
     return 0
 
@@ -403,13 +405,16 @@ def clear_global_variables():
     SPELLING_BEE_HTML.clear()
     SPELLING_BEE_CSS.clear()
     SPELLING_BEE_PNG.clear()
-    SPRINT_BOT_COUNTER.clear()
+    SPRINT_BOT_COUNTER_FILENAME.clear()
     SPRINT_BOT_INDIVIDUAL_COUNTER_FOLDER.clear()
     SPRINT_BOT_AUTOTRIGGER.clear()
     SPRINT_BOT_FORCE_ALL_SPRINT_HISTORY.clear()
     NANOWRIMO_MODE_ENABLED.clear()
+    NANOWRIMO_FILENAME.clear()
+    NANOWRIMO_HISTORY_FOLDER.clear()
     SCHEDULER_FILENAME.clear()
     COMMAND_LIST_FILENAME.clear()
+    LOGS_ENABLED.clear()
 
 # initialize_new_server  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # Initializes a newly-connected Discord server by building its filepaths within the server's storage.
@@ -434,6 +439,7 @@ def initialize_new_server(new_guild_id):
     new_hotwords_file = SERVERS_FOLDER + "/" + str(new_guild_id) + "/hotwords.csv"
     new_receipts_file = SERVERS_FOLDER + "/" + str(new_guild_id) + "/receipts.csv"
     new_sprint_counter_file = SERVERS_FOLDER + "/" + str(new_guild_id) + "/sprint_counter.csv"
+    new_sprint_counter_file = SERVERS_FOLDER + "/" + str(new_guild_id) + "/nanowrimo.csv"
     new_starboard_file = SERVERS_FOLDER + "/" + str(new_guild_id) + "/starboard.txt"
 
     # Copy files
@@ -445,6 +451,14 @@ def initialize_new_server(new_guild_id):
 
     # Build user sprint totals folder
     interim_string = SERVERS_FOLDER + "/" + str(new_guild_id) + "/" + "User_Sprint_Totals"
+    os.mkdir(interim_string)
+
+    # Build logs folder
+    interim_string = SERVERS_FOLDER + "/" + str(new_guild_id) + "/" + "Logs"
+    os.mkdir(interim_string)
+
+    # Build NaNoWriMo history folder
+    interim_string = SERVERS_FOLDER + "/" + str(new_guild_id) + "/" + "NaNoWriMo_History"
     os.mkdir(interim_string)
 
     # Initialize configparser
@@ -509,7 +523,6 @@ def find_guild_position_number(current_id):
         else:
             position += 1
     return -1
-
 
 # time_processor - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # Takes the user-given time value and converts it into integers that datetime can process
@@ -860,11 +873,6 @@ def retrieve_website_html(url):
 
     return html
 
-    html_interim = session.get(url).content
-    html = str(html_interim)
-    
-    return html
-
 # process_ao3_html - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # Takes the raw HTML text stream from an AO3 webpage and removes the unnecessary material, leaving nothing but the site content behind.
 # INPUTS:
@@ -994,113 +1002,6 @@ def remove_html_artifacts(chapter_content, i):
 
     return chapter_content
 
-# sprint_bot_word_count_processor  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
-# Retrieves usernames and word counts for each sprint and adds them to the tabulator.
-# INPUTS:
-#       - (string) message_contents: the contents of the message
-#       - (string) sprint_bot_counter_filename: the location of the CSV file where the historical sprint data is stored 
-#       - (int) current_guild_id: the ID for the current guild. Used for global variable parsing.
-# RETURNS:
-#       - N/A
-def sprint_bot_word_count_processor(message_contents, sprint_bot_counter_filename, current_guild_id):
-    # Find current guild position within stored global variables
-    f = find_guild_position_number(current_guild_id)
-
-    today = datetime.date.today()
-
-    day = today.day
-    month = today.month
-    year = today.year
-    # week = datetime.date(year, month, day).isocalendar()[1]
-
-    today_dateformatted = "%s-%s-%s" % (str(year), str(month), str(day))
-
-    status = 0
-    output_string = "" # "**Current Yearly Total Sprint Stats**\n\n"
-
-    # Begin by parsing @Sprinto's output message and retrieve the user ID and the word count
-    sprinters = message_contents.split("<@!")
-
-    # In the newly created array of user ID/word count pairs, begin to sort through them one by one to see if they're already listed in the CSV
-    cc = 0
-    for i in sprinters:
-        # Skip the first entry in the array as it is junk
-        if cc == 0:
-            cc += 1
-            continue
-
-        # Split the User ID and the word count apart
-        interim = i.split("> — **")
-        current_sprinter_id = interim[0]
-
-        if i.find("word deleted") != -1:
-            interim2 = interim[1].split(" word deleted**")
-            interim2[0] = "-" + interim2[0]
-        elif i.find("words deleted") != -1:
-            interim2 = interim[1].split(" words deleted**")
-            interim2[0] = "-" + interim2[0]
-        elif i.find("word**") != -1:
-            interim2 = interim[1].split(" word**")
-        elif i.find("words**") != -1:
-            interim2 = interim[1].split(" words**")
-
-        current_sprinter_wc = interim2[0]
-        current_sprinter_wc = current_sprinter_wc.replace(",","")
-
-        # Retrieve username from User ID
-        username = client.get_user(int(current_sprinter_id))   
-        split_username = str(username).split("#")
-        username = split_username[0]
-
-        # Check to see if the user is already listed in the CSV
-        found_user = 0
-
-        # Generate a temporary array to store CSV data in
-        temp_file = list()
-        
-        # Read through output file
-        with open(sprint_bot_counter_filename, "r") as loaded_file:
-            reader = csv.reader(loaded_file, delimiter = ",")
-
-            # Print to temp file while also checking if user ID already exists
-            for row in reader:
-                temp_file.append(row)
-                for current_id in row:
-                    if current_id == current_sprinter_id:
-                        found_user = 1
-                        # If the user ID is found, remove it from the temp file
-                        temp_file.remove(row)
-
-                        # Example configuration line: [User_ID (pos 0)],[Day_Total (pos 1)],[Week_Total (pos 2)],[Month_Total (pos 3)],[Year_Total (pos 4)],[Lifetime_Total (pos 5)],[NaNo_Goal (pos 6)]
-
-                        # Combine the new word count with the old one
-                        wc = int(current_sprinter_wc) + int(row[1])
-                        week_wc = int(current_sprinter_wc) + int(row[2])
-                        month_wc = int(current_sprinter_wc) + int(row[3])
-                        year_wc = int(current_sprinter_wc) + int(row[4])
-                        lifetime_wc = int(current_sprinter_wc) + int(row[5])
-                        NaNo_Goal = int(row[6])
-
-                        # Print the new combo word count to the CSV
-                        out = [current_sprinter_id, str(wc), str(week_wc), str(month_wc), str(year_wc), str(lifetime_wc), str(NaNo_Goal)]
-                        # output_string += "@%s: %s words\n" % (username, str(wc))
-                        temp_file.append(out)
-                
-            # If the user is new to the list, add them and their word count as-is
-            if found_user != 1:
-                out = [current_sprinter_id, current_sprinter_wc, current_sprinter_wc, current_sprinter_wc, current_sprinter_wc, current_sprinter_wc, 0]
-                # output_string += "@%s: %s words\n" % (username, current_sprinter_wc)
-                temp_file.append(out)
-        
-        # Print the temp file back out to the CSV file
-        with open(sprint_bot_counter_filename, "w") as loaded_file:
-            writer = csv.writer(loaded_file, delimiter = ",")
-            writer.writerows(temp_file)
-
-        # Print user's contribution into their respective sprint stats csv
-        status = dataprocessing.dump_to_user_file(SPRINT_BOT_INDIVIDUAL_COUNTER_FOLDER[f], current_sprinter_id, today_dateformatted, current_sprinter_wc)
-
-    return status, output_string
 
 # sprint_counter_daily_cleanup - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # Every day, resets the daily sprint count cumulative total for each sprinter to zero
@@ -1110,7 +1011,7 @@ def sprint_bot_word_count_processor(message_contents, sprint_bot_counter_filenam
 # RETURNS:
 #       - (int) status: 0 if no errors, <0 otherwise
 async def sprint_counter_daily_cleanup(sprint_bot_counter_filename, current_guild_id):
-    today = datetime.datetime.now()
+    today = datetime.datetime.now(timezone.utc)
 
     # Find current guild position within stored global variables
     f = find_guild_position_number(current_guild_id)
@@ -1191,7 +1092,7 @@ async def build_starboard_message(payload, output_channel, message, count):
     f = find_guild_position_number(current_guild_id)
 
     # Build embed
-    embed = discord.Embed(title = "", description = message.content, timestamp = datetime.datetime.utcnow())
+    embed = discord.Embed(title = "", description = message.content, timestamp = message.created_at)
     embed.set_author(name = message.author.display_name, icon_url = message.author.avatar_url)
     build_post_url = "[Jump!](https://discord.com/channels/%s/%s/%s)" % (payload.guild_id, payload.channel_id, payload.message_id)
     embed.add_field(name = "Source", value = build_post_url)
@@ -1286,48 +1187,6 @@ async def list_hotwords(hotwords_filename, message):
 
     return status, output_message
 
-# bot_fullhelp - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
-# Prints the bot's current functionality in the form of a few embed posts to the server.
-# INPUTS:
-#       - (DISCORD CLASS) message: the message class given by discord
-# RETURNS:
-#       - (bool) status: -1 if there's a problem, 0 if okay (if necessary)
-#       - (string) output_message: an output message to print (if necessary)
-async def bot_fullhelp(message):
-
-    embed1 = discord.Embed(title = "EndoBot Help (Page 1)", description = "*For more information, visit the bot's [GitHub page](https://github.com/jadonmann/EndoBot).*", color=0x0077ff)
-    embed1.set_image(url = "https://i.gifer.com/7Bi.gif")
-    embed1.add_field(name = "\u200b",
-                     value = "```cs\n# TRIGGER PHRASES #```\nThese are words or phrases that EndoBot actively searches for and responds to with a pre-configured message.\n\n`!eb trigger add [trigger phrase] [bot response] [Message the sender? Yes/No]`\nThis command adds a trigger phrase and a bot response to the masterlist. The brackets are required!\n\n`!eb trigger delete [trigger phrase]`\nThis command removes a trigger phrase and its bot response from the masterlist.\n\n`!eb trigger list`\nThis command lists all trigger phrases and their subsequent bot responses at once.",
-                     inline = False) 
-
-    embed2 = discord.Embed(title = "EndoBot Help (Page 2)", color=0x0077ff)
-    embed2.set_image(url = "https://c.tenor.com/zFE5t_rOWwYAAAAC/mononoke-yakuru.gif")
-    embed2.add_field(name = "\u200b",
-                     value = "```cs\n# RANDOMIZER #```\nThese are commands that allow a user to display a random line or selection from a selected text. Currently supported file formats: N/A\nFuture supported file formats: .epub, .mobi, AO3.org fanfiction, FFN.net fanfiction\n\n`!eb randomizer add [media name] [link]`\nThis command adds a document or a file to bot memory under a shorthand name, `[media name]`, that can be called upon.\n\n`!eb randomizer delete [media name]`\nThis command removes a saved file from bot memory.\n\n`!eb randomizer list`\nThis command lists all files currently loaded into memory and their associated links/filenames.\n\n`!eb randomizer [media name]`\nThis command selects a random line from the file.",
-                     inline = False)  
-
-    embed3 = discord.Embed(title = "EndoBot Help (Page 3)", color=0x0077ff)
-    embed3.set_image(url = "https://media1.giphy.com/media/SYirgmIRk5hIJCuK7t/giphy.gif")
-    embed3.add_field(name = "\u200b",
-                     value = "```cs\n# BOT CONFIGURATION #```\nThese commands allow moderators and server owners to change bot configuration settings without having to manually adjust or change any bot files. WARNING: this can permanently damage bot functionality if not handled correctly.\n\n`!eb config list`\nThis command lists all available configuration options and their default/expected values.\n\n`!eb config [configuration option] [value]`\nThis command allows a moderator to change a configuration option. The brackets are required!\n\n`!eb reboot`\nThis restarts EndoBot and loads in any changes to the configuration file that may have been made.",
-                     inline = False)
-
-    embed4 = discord.Embed(title = "EndoBot Help (Page 4)", color=0x0077ff)
-    embed4.set_image(url = "https://i.gifer.com/ns9.gif")
-    embed4.add_field(name = "\u200b",
-                     value = "```cs\n# MISCELLANEOUS COMMANDS #```\nCommands for various random bot features.\n\n`!eb leaderboard`\nThis command displays the current top 3 most starred users in a server.\n\n`!eb help`\nThe command used to display this message!",
-                     inline = False) 
-
-    channel = message.channel
-    
-    await channel.send(embed = embed1)
-    await channel.send(embed = embed2)
-    await channel.send(embed = embed3)
-    await channel.send(embed = embed4)
-
-    return 0, None
-
 # bot_help - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # Prints the bot's current functionality in the form of a condensed list to the server.
 # INPUTS:
@@ -1342,21 +1201,68 @@ async def bot_help(message):
     current_guild_id = int(message.guild.id)
     f = find_guild_position_number(current_guild_id)
 
-    output_string = "```cs\n# ENDOBOT FULL COMMAND LIST #```\n**Command | Brackets Required? | Moderator Privileges Required?**\n\n"
+    output_string = "❓ **ENDOBOT FULL COMMAND LIST** ❓\n*Command | Brackets Required? | Moderator Privileges Required?*\n\n"
 
     with open(COMMAND_LIST_FILENAME[f], "r") as loaded_file:
         reader = csv.reader(loaded_file, delimiter = HOTWORDS_DELIMITER[f])
         for row in reader:
-            embed1 = discord.Embed(title = "EndoBot Quick Help", description = "*For more information, visit the bot's [GitHub page](https://github.com/jadonmann/EndoBot).*", color=0x0077ff)
             output_string = output_string + row[0] + " | " + row[1] + " | " + row[2] + "\n"
 
-    embed1.add_field(name = "\u200b",
-                     value = output_string,
-                     inline = False)
-
-    await channel.send(embed = embed1)
+    await channel.send(output_string)
     return 0, None
 
+
+# logs_processor - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# This function takes a message, detects whether or not it has an attachment or an embed, determines whether or not the server has logging enabled, and prints the message to logs
+# INPUTS:
+#       - (DISCORD CLASS) message: the message that Discord detected, along with its contained information
+# OUTPUTS:
+#       - N/A
+def logs_processor(message):
+    # Ignores anything that isn't a message in a channel or a DM (basically just forces an exception ignore)
+    if not isinstance(message.channel, discord.channel.DMChannel):
+        # Find server ID
+        current_guild_id = int(message.guild.id)
+        f = find_guild_position_number(current_guild_id)
+
+        # Check to see if the server wherein the message was posted allows logging
+        if LOGS_ENABLED[f] == "Yes":
+            # Build a log file name based on the current date
+            today = datetime.datetime.now(timezone.utc)
+            date_string = today.strftime("%Y-%m-%d")
+            log_name = SERVERS_FOLDER + "/" + str(current_guild_id) + "/Logs/" + date_string + ".csv"
+
+            # Create the log file if it doesn't already exist
+            if not exists(log_name):
+                log_file = open(log_name, "w+")
+            # Otherwise, just open it in append mode
+            else:
+                log_file = open(log_name, "a")
+
+            # Initialize the file for CSV writing 
+            log_writer = csv.writer(log_file, delimiter = HOTWORDS_DELIMITER[f])
+
+            # Build up a temporary string that will eventually be printed to the log file
+            output_message_date = str(message.created_at)
+            output_channel = str(message.channel)
+            output_author = str(message.author).split("#")[0]
+            output_content = str(message.content)
+            output_attachments = ""
+
+            # Check to see if a message contains attachments
+            if message.attachments:
+                # for i in message.attachments:
+                #     output_attachments = output_attachments + ", " + message.attachments[i].url
+                output_attachments = message.attachments[0].url
+            else:
+                output_attachments = "None"
+
+            # Print output to 
+            log_writer.writerow((output_message_date,output_channel,output_author,output_content,output_attachments))
+
+            log_file.close()
+
+        
 # leaderboard  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # Counts the number of times each user has been starred on the starboard and ranks them greatest-to-least
 # INPUTS:
@@ -1509,12 +1415,12 @@ async def sprint_leaderboard(sprint_counter_filename, channel_id, print_message,
             output_message = output_message + output_message_interim
 
         # Build up embed, but only if print_message is true
-        if print_message:
+        if print_message != 0:
             # If the bot is not supposed to print anything when no users have sprinted that day, change the output message to reflect that
-            if SPRINT_BOT_FORCE_ALL_SPRINT_HISTORY[f] == "No" and total_day_count_across_all_users == 0:
+            if SPRINT_BOT_FORCE_ALL_SPRINT_HISTORY[f] == "No" and total_day_count_across_all_users == 0 and print_message != 2:
                 output_message = "No words have been sprinted yet today!"
 
-            second_output_message = "⚡ **ENDOBOT @SPRINTO ASSISTANT** ⚡\n" + output_message
+            second_output_message = "⚡ **ENDOBOT SPRINT BOT ASSISTANT** ⚡\n" + output_message
 
             # Print to Discord
             channel = client.get_channel(int(channel_id))
@@ -1587,10 +1493,16 @@ def spelling_bee_builder(current_guild_id):
         output_string = "</text></svg ></div ></body></html>"
         working_html_document.write(output_string)
 
-    # Convert the generated HTML into a PNG
+    # # Convert the generated HTML into a PNG
+    # options = webdriver.ChromeOptions()
+    # options.headless = True
+    
+    # driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
+
+    service = Service()
     options = webdriver.ChromeOptions()
     options.headless = True
-    driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
+    driver = webdriver.Chrome(service=service, options=options)
 
     abs_path = os.path.abspath(SPELLING_BEE_HTML[f])
     abs_path_with_header = "file://" + abs_path
@@ -1598,6 +1510,7 @@ def spelling_bee_builder(current_guild_id):
 
     driver.set_window_size(width=302, height=290)
     driver.get_screenshot_as_file("spelling_bee.png")
+
 
     # Print the puzzle solutions, regardless of however many there may be
     output_string_interim = ""
@@ -1631,7 +1544,7 @@ async def spelling_bee_printer(channel_id, spelling_bee_solutions, current_guild
     embed = discord.Embed(title = "NYT Daily Spelling Bee", color=0x0077ff)
     
     # Build the embed's image and footer strings
-    today = datetime.date.today()
+    today = datetime.datetime.now(timezone.utc)
     footer_string = "Day of " + today.strftime("%d %B %Y") + "\n" + url
     image_string = "attachment://" + SPELLING_BEE_PNG[f]
     embed.set_image(url = image_string)
@@ -1731,12 +1644,18 @@ async def daily_messages(channel_id, current_guild_id, force_flag):
     # Get channel ID
     channel = client.get_channel(int(channel_id))
 
-    today = datetime.datetime.now()
+    today = datetime.datetime.now(timezone.utc)
     url = SPELLING_BEE_URL[f]
     words_written = False
 
     # Process current sprint totals
-    status, sprint_output = await sprint_leaderboard(SPRINT_BOT_COUNTER[f], int(channel_id), 0, current_guild_id)
+    if DAILY_ANNOUNCEMENTS_AUTO_POST == "Yes":
+        try:
+            status, sprint_output = await sprint_leaderboard(SPRINT_BOT_COUNTER_FILENAME[f], int(channel_id), 0, current_guild_id)
+        except:
+            status = -20
+    else:
+        status = -20
 
     # Checks to see if words were written in the previous day, and if the bot is allowed to post when that's the case
     if status == -20:
@@ -1745,15 +1664,22 @@ async def daily_messages(channel_id, current_guild_id, force_flag):
     else:
         words_written = True
 
-    # Check to see if the server has anything to post, or if morning announcements have been disabled for the server
-    if DAILY_ANNOUNCEMENTS_AUTO_POST[f] == "No" or (DAILY_ANNOUNCEMENTS_INCLUDE_SPRINTS[f] == "No" and DAILY_ANNOUNCEMENTS_INCLUDE_NANO_STATS == "No" and DAILY_ANNOUNCEMENTS_INCLUDE_PUZZLES[f] == "No") or (DAILY_ANNOUNCEMENTS_INCLUDE_SPRINTS[f] == "Yes" and (words_written == False and DAILY_ANNOUNCEMENTS_SKIP_ZERO_SPRINT_DAYS[f] == "No") and DAILY_ANNOUNCEMENTS_INCLUDE_NANO_STATS == "No" and DAILY_ANNOUNCEMENTS_INCLUDE_PUZZLES[f] == "No"):
+    # Check to see if the server has anything to post, or if morning announcements have been disabled for the server (separated out for easier visibility)
+    if DAILY_ANNOUNCEMENTS_AUTO_POST[f] == "No":
         return 0
+    if DAILY_ANNOUNCEMENTS_INCLUDE_SPRINTS[f] == "No" and DAILY_ANNOUNCEMENTS_INCLUDE_NANO_STATS[f] == "No" and DAILY_ANNOUNCEMENTS_INCLUDE_PUZZLES[f] == "No":
+        return 0
+    if DAILY_ANNOUNCEMENTS_INCLUDE_SPRINTS[f] == "Yes" and (words_written == False and DAILY_ANNOUNCEMENTS_SKIP_ZERO_SPRINT_DAYS[f] == "Yes") and DAILY_ANNOUNCEMENTS_INCLUDE_NANO_STATS[f] == "No" and DAILY_ANNOUNCEMENTS_INCLUDE_PUZZLES[f] == "No":
+        return 0
+    if DAILY_ANNOUNCEMENTS_INCLUDE_SPRINTS[f] == "Yes" and (words_written == False and DAILY_ANNOUNCEMENTS_SKIP_ZERO_SPRINT_DAYS[f] == "Yes") and (DAILY_ANNOUNCEMENTS_INCLUDE_NANO_STATS[f] == "Yes" and NANOWRIMO_MODE_ENABLED[f] == "No") and DAILY_ANNOUNCEMENTS_INCLUDE_PUZZLES[f] == "No":
+        return 0
+    
 
     # --> DAILY ANNOUNCEMENTS HEADER
     output_message = " ☀️ **%s DAILY ANNOUNCEMENTS** ☀️ " % str(server_name).upper()
 
     # Build the embed's footer string
-    today = datetime.date.today()
+    today = datetime.datetime.now(timezone.utc)
     footer_string = " - Day of %s" % (today.strftime("%d %B %Y"))
     output_message += footer_string
 
@@ -1777,13 +1703,16 @@ async def daily_messages(channel_id, current_guild_id, force_flag):
     # If a NaNoWriMo event is going on and DAILY_ANNOUNCEMENTS_INCLUDE_NANO_STATS is true, include the current/final word count tallies in the morning announcements
     if NANOWRIMO_MODE_ENABLED[f] == "Yes" and DAILY_ANNOUNCEMENTS_INCLUDE_NANO_STATS[f] == "Yes":
         if today.day == 1:
-            tuples = nanowrimo.nano_leaderboard(SPRINT_BOT_COUNTER[f])
+            tuples = nanowrimo.nano_leaderboard(NANOWRIMO_FILENAME[f])
             status, output_message_interim = nanowrimo.nano_final_leaderboard_postprocessing(tuples, client)
-            output_message = "--> 👑 **Final NaNoWriMo Results**" + output_message_interim
+            output_message = "--> 👑 **Final NaNoWriMo Results**\n" + output_message_interim
+
+            # Archive previous month's NaNoWriMo challenge file
+            nanowrimo.archive_nanowrimo(NANOWRIMO_HISTORY_FOLDER[f], NANOWRIMO_FILENAME[f])
         else:
-            tuples = nanowrimo.nano_leaderboard(SPRINT_BOT_COUNTER[f])
+            tuples = nanowrimo.nano_leaderboard(NANOWRIMO_FILENAME[f])
             status, output_message_interim = nanowrimo.nano_leaderboard_postprocessing(tuples, client)
-            output_message = " --> 👑 **Current NaNoWriMo Standings**" + output_message_interim
+            output_message = " --> 👑 **Current NaNoWriMo Standings**\n" + output_message_interim
 
         # Print to Discord
         await channel.send(output_message)
@@ -1799,12 +1728,13 @@ async def daily_messages(channel_id, current_guild_id, force_flag):
         output_message += spelling_bee_solutions
 
         # Print to Discord
+        print("DEBUG: Attempting to post puzzles...")
         await channel.send(output_message, file = discord.File(SPELLING_BEE_PNG[f]))
 
     # If forced, do not reset the daily counter (allows for morning messages at any time of the day)
     if force_flag == 0:
         # Reset the daily sprint counter for each user
-        status = await sprint_counter_daily_cleanup(SPRINT_BOT_COUNTER[f], current_guild_id)
+        status = await sprint_counter_daily_cleanup(SPRINT_BOT_COUNTER_FILENAME[f], current_guild_id)
     
 
 # bot_command_processor  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
@@ -1958,9 +1888,9 @@ async def bot_command_processor(message, command_string):
                                 else:
                                     value_to_pass = abs(value_to_pass)
 
-                                wordsprints.adjust_sprintstats(value_to_pass, user_id, SPRINT_BOT_COUNTER[f])
+                                wordsprints.adjust_sprintstats(value_to_pass, user_id, SPRINT_BOT_COUNTER_FILENAME[f])
                                 await channel.send("Sprint leaderboard updated!")
-                                status, response = await sprint_leaderboard(SPRINT_BOT_COUNTER[f], int(message.channel.id), 1, current_guild_id)
+                                status, response = await sprint_leaderboard(SPRINT_BOT_COUNTER_FILENAME[f], int(message.channel.id), 1, current_guild_id)
                             
                             else:
                                 status = -1
@@ -1969,19 +1899,16 @@ async def bot_command_processor(message, command_string):
                             status = -1
                 elif command_array[2] == "forceupdate" or command_array[2] == "force_update":
                     if mod == True:
-                        status = await sprint_counter_daily_cleanup(SPRINT_BOT_COUNTER[f], current_guild_id)
+                        status = await sprint_counter_daily_cleanup(SPRINT_BOT_COUNTER_FILENAME[f], current_guild_id)
                         status = 0
                         await channel.send("Sprint Counter daily counter update forced!")
                     else:
                         status = -1
                         response = "Sorry, you lack the necessary permissions to use this command."
-                elif command_array[2] == "leaderboard":
-                    status, response = await sprint_leaderboard(SPRINT_BOT_COUNTER[f], int(message.channel.id), 1, current_guild_id)
-                elif command_array[2] == "fullleaderboard":
-                    status, response = await sprint_leaderboard(SPRINT_BOT_COUNTER[f], int(message.channel.id), 2, current_guild_id)
-
-        elif command_array[1] == "fullhelp":
-            status, response = await bot_fullhelp(message)
+                elif command_array[2] == "today":
+                    status, response = await sprint_leaderboard(SPRINT_BOT_COUNTER_FILENAME[f], int(message.channel.id), 1, current_guild_id)
+                elif command_array[2] == "full":
+                    status, response = await sprint_leaderboard(SPRINT_BOT_COUNTER_FILENAME[f], int(message.channel.id), 2, current_guild_id)
 
         elif command_array[1] == "help":
             status, response = await bot_help(message)
@@ -2054,31 +1981,35 @@ async def bot_command_processor(message, command_string):
         elif command_array[1] == "nanowrimo":
             if number_of_elements > 2:
                 if command_array[2] == "enroll":
-                    if NANOWRIMO_MODE_ENABLED[f] == "Yes":
-                        if number_of_elements > 3:
-                            if command_array[3].isdigit():
-                                nanowrimo.set_nano_goal(SPRINT_BOT_COUNTER[f], int(message.author.id), command_array[3])
-                                output = "Success! You have been enrolled in NaNoWriMo word count tracking with a goal of %s words." % (command_array[3])
-                                await channel.send(output)
-                            else: 
-                                status = -1
-                                response = "Please enter a valid word count!"
-                        else:
+                    # Check to see if a NaNo event is happening; if not, start one
+                    if NANOWRIMO_MODE_ENABLED[f] == "No":
+                        change_configuration("nanowrimo_mode_enabled", "Yes", str(current_guild_id))
+                        await channel.send("🚨🚨🚨 **ENDOBOT NANOWRIMO ASSISTANT** 🚨🚨🚨\nA NaNoWriMo competition has been enabled!")
+                        await on_ready()
+                    
+                    # Check to make sure the user input a valid goal word count
+                    if number_of_elements > 3:
+                        if command_array[3].isdigit():
+                            nanowrimo.set_nano_goal(NANOWRIMO_FILENAME[f], int(message.author.id), command_array[3])
+                            output = "Success! You have been enrolled in NaNoWriMo word count tracking with a goal of %s words." % (command_array[3])
+                            await channel.send(output)
+                        else: 
                             status = -1
                             response = "Please enter a valid word count!"
                     else:
-                        await channel.send("There currently isn't a NaNoWriMo challenge running! Type `!eb nanowrimo enable` to enable it and begin the competition!")
+                        status = -1
+                        response = "Please enter a valid word count!"
 
                 if command_array[2] == "withdraw":
                     if NANOWRIMO_MODE_ENABLED[f] == "Yes":
-                        nanowrimo.delete_nano_goal(SPRINT_BOT_COUNTER[f], int(message.author.id))
+                        nanowrimo.delete_nano_goal(NANOWRIMO_FILENAME[f], int(message.author.id))
                         await channel.send("NaNoWriMo participation withdrawn!")
                     else:
                         await channel.send("There currently isn't a NaNoWriMo challenge running!")
                 
                 if command_array[2] == "check":
                     if NANOWRIMO_MODE_ENABLED[f] == "Yes":
-                        goal, progress = nanowrimo.see_nano_goal(SPRINT_BOT_COUNTER[f], int(message.author.id))
+                        goal, progress = nanowrimo.see_nano_goal(NANOWRIMO_FILENAME[f], int(message.author.id))
                         output = "This month, you have written a total of %s words. Your goal is %s." % (progress, goal)
                         delta_wc = int(progress) - int(goal)
                         if delta_wc < 0:
@@ -2097,7 +2028,7 @@ async def bot_command_processor(message, command_string):
                     else:
                         await channel.send("A NaNoWriMo challenge is already running!")
                     
-                if command_array[2] == "disable":
+                if command_array[2] == "disable" or command_array[2] == "cancel":
                     if NANOWRIMO_MODE_ENABLED[f] == "Yes":
                         change_configuration("nanowrimo_mode_enabled", "No", str(current_guild_id))
                         await channel.send("The NaNoWriMo competition has been called off!")
@@ -2107,17 +2038,91 @@ async def bot_command_processor(message, command_string):
 
                 if command_array[2] == "leaderboard":
                     if NANOWRIMO_MODE_ENABLED[f] == "Yes":
-                        tuples = nanowrimo.nano_leaderboard(SPRINT_BOT_COUNTER[f])
+                        tuples = nanowrimo.nano_leaderboard(NANOWRIMO_FILENAME[f])
                         status, output_message = nanowrimo.nano_leaderboard_postprocessing(tuples, client)
 
-                        embed = discord.Embed(title = "⚡ EndoBot @Sprinto Assistant ⚡", color=0x0077ff)
-                        embed.add_field(name = "NaNoWriMo Word Count Totals", inline = False, value = output_message)
-                        embed.set_footer(text = "`!eb nanowrimo enroll [wordcount]` (without brackets) to join!")
+                        second_output_message = "👑 **ENDOBOT NANOWRIMO ASSISTANT** 👑\n" + output_message
 
                         # Print to Discord
-                        await channel.send(embed = embed)
+                        await channel.send(second_output_message)
                     else:
                         await channel.send("There currently isn't a NaNoWriMo challenge running!")
+                
+                if command_array[2] == "add":
+                    if NANOWRIMO_MODE_ENABLED[f] == "Yes":
+                        if number_of_elements > 3:
+                            if command_array[3].isdigit():
+                                nanowrimo.add_nano_words(NANOWRIMO_FILENAME[f], int(message.author.id), command_array[3])
+                                output = "Success! You've added %s words to your total, which is now " % (command_array[3])
+                                goal, progress = nanowrimo.see_nano_goal(NANOWRIMO_FILENAME[f], int(message.author.id))
+                                output += "%d words. Your goal this month is %d words. (%d percent complete!)" % (progress, goal, (progress/goal * 100))
+                                await channel.send(output)
+                            else: 
+                                status = -1
+                                response = "Please enter a valid word count!"
+                        else:
+                            status = -1
+                            response = "Please enter a valid word count!"
+                    else:
+                        await channel.send("There currently isn't a NaNoWriMo challenge running!")
+                
+                if command_array[2] == "set":
+                    if NANOWRIMO_MODE_ENABLED[f] == "Yes":
+                        if number_of_elements > 3:
+                            if command_array[3].isdigit():
+                                nanowrimo.set_nano_words(NANOWRIMO_FILENAME[f], int(message.author.id), command_array[3])
+                                output = "Success! You've set your word count to %s words. " % (command_array[3])
+                                goal, progress = nanowrimo.see_nano_goal(NANOWRIMO_FILENAME[f], int(message.author.id))
+                                output += "Your goal this month is %d words. (%d percent complete!)" % (goal, (progress/goal * 100))
+                                await channel.send(output)
+                            else: 
+                                status = -1
+                                response = "Please enter a valid word count!"
+                        else:
+                            status = -1
+                            response = "Please enter a valid word count!"
+                    else:
+                        await channel.send("There currently isn't a NaNoWriMo challenge running!")
+
+                if command_array[2] == "useradd":
+                    if mod == True:
+                        if NANOWRIMO_MODE_ENABLED[f] == "Yes":
+                            if number_of_elements > 4:
+                                if command_array[3].isdigit() and command_array[4].isdigit():
+                                    nanowrimo.add_nano_words(NANOWRIMO_FILENAME[f], command_array[4], command_array[3])
+                                    output = "Success! %s words added to user %s's total." % (command_array[3], command_array[4])
+                                    await channel.send(output)
+                                else: 
+                                    status = -1
+                                    response = "Please enter a valid word count!"
+                            else:
+                                status = -1
+                                response = "Please enter a valid word count!"
+                        else:
+                            await channel.send("There currently isn't a NaNoWriMo challenge running!")
+                    else:
+                        status = -1
+                        response = "Sorry, you lack the necessary permissions to use this command."
+                
+                if command_array[2] == "userset":
+                    if mod == True:
+                        if NANOWRIMO_MODE_ENABLED[f] == "Yes":
+                            if number_of_elements > 4:
+                                if command_array[3].isdigit() and command_array[4].isdigit():
+                                    nanowrimo.set_nano_words(NANOWRIMO_FILENAME[f], command_array[4], command_array[3])
+                                    output = "Success! Word count for user %s set to %s words. " % (command_array[4], command_array[3])
+                                    await channel.send(output)
+                                else: 
+                                    status = -1
+                                    response = "Please enter a valid word count!"
+                            else:
+                                status = -1
+                                response = "Please enter a valid word count!"
+                        else:
+                            await channel.send("There currently isn't a NaNoWriMo challenge running!")
+                    else:
+                        status = -1
+                        response = "Sorry, you lack the necessary permissions to use this command."
 
         elif command_array[1] == "admin":
             if command_array[2] == "forcemorningmessages":
@@ -2133,7 +2138,7 @@ async def bot_command_processor(message, command_string):
         elif command_array[1] == "dev1":
             if message.author.id != int("330900130997862400"):
                 status = -1
-                response = "Sorry, you lack the necessary permissions to use this command."
+                response = "Sorry, this is a feature currently under development and is inaccessible to non-developers!"
             else:
                 ## PLACE COMMANDS UNDER DEVELOPMENT HERE ##
                 output_graph = "output_graph.png"
@@ -2152,7 +2157,8 @@ async def bot_command_processor(message, command_string):
             await channel.send(result)
 
         elif command_array[1] == "dev3":
-            await daily_messages(int(message.channel.id), current_guild_id, 1)
+            result = wordsprints.count_user_sprints(SPRINT_BOT_INDIVIDUAL_COUNTER_FOLDER[f], str(message.author.id))
+            await channel.send(result)
                 
         else:
             status = -1
@@ -2271,35 +2277,12 @@ async def on_ready():
         print(f'{client.user.name} has connected to Discord!')
         print("=========================================================================")
 
-
-# # On Bot Disconnect - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
-# @client.event
-# async def on_disconnect():
-#     # Print message stating that the bot has connected to Discord
-#     print("=========================================================================")
-#     print(f'{client.user.name} has disconnected from Discord!')
-
-#     # Enable the trigger that kills each thread
-#     set_scheduler_reboot_flag(1)
-
-#     # Wait until each thread has gone through its one second cycle
-#     await asyncio.sleep(2)
-
-#     # Disable the trigger that kills each thread
-#     set_scheduler_reboot_flag(0)
-
-#     # Tell the Bot that the scheduler can be reset again 
-#     set_scheduler(0)
-    
-#     print("DISCONNECTED - rebooting EndoBot....")
-#     os.execv(sys.argv[0], sys.argv)
-    
-
 # Message Detection Wrapper  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 @client.event
 async def on_message(message):
     # Print debug line to console
-    print(f'[{message.guild}] #{message.channel} | @{message.author}: {message.content}')
+    print(f'[{message.created_at}] [{message.guild}] #{message.channel} @{message.author}: {message.content}')
+    logs_processor(message)
 
     # Find server ID
     if not isinstance(message.channel, discord.channel.DMChannel):
@@ -2393,22 +2376,51 @@ async def on_message(message):
             # Check message to see if it is an end-of-sprint message
             if message.content.find("🏆 **CONGRATS EVERYONE**") != -1:
                 # Process sprint values and add to total counter
-                status, response = sprint_bot_word_count_processor(message.content, SPRINT_BOT_COUNTER[f], current_guild_id)
+                status, all_sprinter_ids, all_sprinter_wcs = wordsprints.sprinto_word_count_processor(message.content, SPRINT_BOT_COUNTER_FILENAME[f], NANOWRIMO_FILENAME[f], NANOWRIMO_MODE_ENABLED[f], SPRINT_BOT_INDIVIDUAL_COUNTER_FOLDER[f], current_guild_id)
                 # If there were no problems, also print out the current leaderboard
                 if status == 0 and (SPRINT_BOT_AUTOTRIGGER[f] == "Yes" or SPRINT_BOT_AUTOTRIGGER[f] == "yes"):
                     print("[WORD SPRINT PROCESSOR] Sprint results processed.")
-                    await sprint_leaderboard(SPRINT_BOT_COUNTER[f], int(message.channel.id), 1, current_guild_id)
+                    await sprint_leaderboard(SPRINT_BOT_COUNTER_FILENAME[f], int(message.channel.id), 1, current_guild_id)
                     # If NaNo is enabled, then also output a NaNo embed
                     if(NANOWRIMO_MODE_ENABLED[f] == "Yes" or NANOWRIMO_MODE_ENABLED[f] == "Yes"):
-                        tuples = nanowrimo.nano_leaderboard(SPRINT_BOT_COUNTER[f])
+                        # Submit all word counts to the NaNo adder
+                        for index, i in enumerate(all_sprinter_ids):
+                            nanowrimo.add_nano_words(NANOWRIMO_FILENAME[f], all_sprinter_ids[index], all_sprinter_wcs[index])
+
+                        # Process the NaNo leaderboard
+                        tuples = nanowrimo.nano_leaderboard(NANOWRIMO_FILENAME[f])
                         status, output_message = nanowrimo.nano_leaderboard_postprocessing(tuples, client)
 
-                        embed = discord.Embed(title = "⚡ EndoBot @Sprinto Assistant ⚡", color=0x0077ff)
-                        embed.add_field(name = "NaNoWriMo Word Count Totals", inline = False, value = output_message)
-                        embed.set_footer(text = "`!eb nanowrimo enroll [wordcount]` (without brackets) to join!")
+                        second_output_message = "👑 **ENDOBOT NANOWRIMO ASSISTANT** 👑\n" + output_message
 
                         # Print to Discord
-                        await message.channel.send(embed = embed)
+                        await message.channel.send(second_output_message)
+
+        # Check to see if @Writer-Bot was the tweeter
+        if message.author.id == int("460090810029965312"):
+            # Check message to see if it is an end-of-sprint message
+            if message.content.find(":trophy: **Sprint results** :trophy:") != -1:
+                # Process sprint values and add to total counter
+                status, all_sprinter_ids, all_sprinter_wcs = wordsprints.writerbot_word_count_processor(message.content, SPRINT_BOT_COUNTER_FILENAME[f], NANOWRIMO_FILENAME[f], NANOWRIMO_MODE_ENABLED[f], SPRINT_BOT_INDIVIDUAL_COUNTER_FOLDER[f], current_guild_id)
+                # If there were no problems, also print out the current leaderboard
+                if status == 0 and (SPRINT_BOT_AUTOTRIGGER[f] == "Yes" or SPRINT_BOT_AUTOTRIGGER[f] == "yes"):
+                    print("[WORD SPRINT PROCESSOR] Sprint results processed.")
+                    await sprint_leaderboard(SPRINT_BOT_COUNTER_FILENAME[f], int(message.channel.id), 1, current_guild_id)
+                    # If NaNo is enabled, then also output a NaNo embed
+                    if(NANOWRIMO_MODE_ENABLED[f] == "Yes" or NANOWRIMO_MODE_ENABLED[f] == "Yes"):
+                        # Submit all word counts to the NaNo adder
+                        for index, i in enumerate(all_sprinter_ids):
+                            nanowrimo.add_nano_words(NANOWRIMO_FILENAME[f], all_sprinter_ids[index], all_sprinter_wcs[index])
+
+                        # Process the NaNo leaderboard
+                        tuples = nanowrimo.nano_leaderboard(NANOWRIMO_FILENAME[f])
+                        status, output_message = nanowrimo.nano_leaderboard_postprocessing(tuples, client)
+
+                        second_output_message = "👑 **ENDOBOT NANOWRIMO ASSISTANT** 👑\n" + output_message
+
+                        # Print to Discord
+                        await message.channel.send(second_output_message)
+
                 
 # Starboard Emoji Reaction Parser  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 @client.event
@@ -2462,18 +2474,6 @@ async def on_raw_reaction_add(payload):
                     with open(STARBOARD_FILENAME[f], "a") as sinbin:
                         output_message = "%s\n" % (message.content)
                         sinbin.write(output_message)
-
-# # Post Scheduler - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
-# async def post_scheduler(output_channel, current_guild_id):
-#     while True:
-#         if REBOOT_SCHEDULER_FLAG == 0:
-#             f = find_guild_position_number(current_guild_id)
-#             if GLOBAL_CLOCK == SPELLING_BEE_POST_TIME[f]:
-#                 interim_string = "[SCHEDULER] SUCCESS - server %s printed the daily message as expected." % str(current_guild_id)
-#                 print(interim_string)
-#                 # await morning_messages(output_channel, current_guild_id)
-#         else:
-#             break
     
 @tasks.loop(hours=24)
 async def called_once_a_day(output_channel, current_guild_id):
@@ -2497,7 +2497,7 @@ async def background_task(force_flag, output_channel, current_guild_id):
         DAILY_MESSAGE_SCHEDULER_CURRENT_STATE[f] == 1
 
         # Run in a continuous loop
-        while REBOOT_SCHEDULER_FLAG == 0:
+        while True:
             # Obtain the current time
             now = datetime.datetime.utcnow()
 
@@ -2538,10 +2538,6 @@ if __name__ == "__main__":
 
     # Initialize scheduler
     set_scheduler(0)
-    set_scheduler_reboot_flag(0)
-
-    # Begin Global Clock
-    # global_clock()
 
     # Begin Bot
     client.run(TOKEN)
